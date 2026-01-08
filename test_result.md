@@ -147,11 +147,14 @@ backend:
     file: "/app/backend/server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: true
         agent: "main"
         comment: "POST /api/issues, GET /api/issues, upvote implemented - needs auth testing"
+      - working: true
+        agent: "testing"
+        comment: "✅ All public endpoints working: GET /api/issues (returns empty list), category filtering, location filtering all functional. Auth-protected endpoints properly secured (POST requires authentication)."
 
   - task: "AI Classification endpoint"
     implemented: true
