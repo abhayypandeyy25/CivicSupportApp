@@ -201,7 +201,7 @@ export default function LoginScreen() {
       } else if (error.code === 'auth/popup-blocked') {
         errorMessage = 'Popup was blocked. Please allow popups and try again.';
       } else if (error.code === 'auth/unauthorized-domain') {
-        errorMessage = 'This domain is not authorized for Google Sign-In. Please use Demo User.';
+        errorMessage = 'Domain not authorized. Please add "civicwatch-21.preview.emergentagent.com" in Firebase Console → Authentication → Settings → Authorized domains. For now, use Demo User.';
       } else if (error.message) {
         errorMessage = error.message;
       }
