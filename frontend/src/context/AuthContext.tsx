@@ -9,8 +9,11 @@ import {
   signOut as firebaseSignOut,
   GoogleAuthProvider,
   signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   ConfirmationResult,
   RecaptchaVerifier,
+  ApplicationVerifier,
 } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
@@ -19,7 +22,7 @@ interface AuthContextType {
   user: User | null;
   loading: boolean;
   token: string | null;
-  sendOTP: (phoneNumber: string) => Promise<ConfirmationResult | null>;
+  sendOTP: (phoneNumber: string, recaptchaVerifier: ApplicationVerifier) => Promise<ConfirmationResult | null>;
   verifyOTP: (confirmationResult: ConfirmationResult, code: string) => Promise<boolean>;
   signInWithGoogle: () => Promise<boolean>;
   signOut: () => Promise<void>;
@@ -47,23 +50,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
     });
 
+    // Check for redirect result on web
+    if (Platform.OS === 'web') {
+      getRedirectResult(auth).then((result) => {
+        if (result?.user) {
+          console.log('Redirect sign-in successful');
+        }
+      }).catch((error) => {
+        console.error('Redirect error:', error);
+      });
+    }
+
     return unsubscribe;
   }, []);
 
-  const sendOTP = async (phoneNumber: string): Promise<ConfirmationResult | null> => {
+  const sendOTP = async (phoneNumber: string, recaptchaVerifier: ApplicationVerifier): Promise<ConfirmationResult | null> => {
     try {
-      if (Platform.OS === 'web') {
-        // For web, we need RecaptchaVerifier
-        const recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-          size: 'invisible',
-        });
-        const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
-        return confirmationResult;
-      }
-      // For native, Firebase handles verification differently
-      // This is a simplified version - in production you'd use expo-firebase-recaptcha
-      return null;
-    } catch (error) {
+      const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
+      return confirmationResult;
+    } catch (error: any) {
       console.error('Error sending OTP:', error);
       throw error;
     }
@@ -83,14 +88,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       if (Platform.OS === 'web') {
         const provider = new GoogleAuthProvider();
-        const result = await signInWithPopup(auth, provider);
-        return !!result.user;
+        provider.addScope('email');
+        provider.addScope('profile');
+        
+        try {
+          // Try popup first
+          const result = await signInWithPopup(auth, provider);
+          return !!result.user;
+        } catch (popupError: any) {
+          // If popup blocked, try redirect
+          if (popupError.code === 'auth/popup-blocked' || popupError.code === 'auth/popup-closed-by-user') {
+            await signInWithRedirect(auth, provider);
+            return true; // Will redirect, so return true
+          }
+          throw popupError;
+        }
       }
-      // For native, we'll handle this differently
       return false;
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error signing in with Google:', error);
-      return false;
+      throw error;
     }
   };
 
