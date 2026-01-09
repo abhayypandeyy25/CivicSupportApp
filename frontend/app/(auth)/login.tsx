@@ -29,14 +29,14 @@ export default function LoginScreen() {
   const router = useRouter();
   const { verifyOTP, signInWithGoogle, user } = useAuth();
 
-  // Initialize reCAPTCHA on web
+  // Initialize invisible reCAPTCHA on web
   useEffect(() => {
     if (Platform.OS === 'web') {
-      setupRecaptcha();
+      setupInvisibleRecaptcha();
     }
   }, []);
 
-  const setupRecaptcha = () => {
+  const setupInvisibleRecaptcha = () => {
     try {
       // Clear any existing recaptcha
       const container = document.getElementById('recaptcha-container');
@@ -44,29 +44,29 @@ export default function LoginScreen() {
         container.innerHTML = '';
       }
 
+      // Create invisible reCAPTCHA
       const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-        size: 'normal',
+        size: 'invisible',
         callback: (response: any) => {
-          console.log('reCAPTCHA verified successfully!', response);
-          setStatusMessage('✓ Verification complete! Click Send OTP');
+          console.log('Invisible reCAPTCHA solved automatically');
         },
         'expired-callback': () => {
-          console.log('reCAPTCHA expired');
-          setStatusMessage('Verification expired. Please try again.');
+          console.log('reCAPTCHA expired, resetting...');
+          setupInvisibleRecaptcha();
         }
       });
 
       verifier.render().then((widgetId) => {
-        console.log('reCAPTCHA rendered with widget ID:', widgetId);
+        console.log('Invisible reCAPTCHA ready, widget ID:', widgetId);
         setRecaptchaVerifier(verifier);
-        setStatusMessage('Complete the verification below');
       }).catch((error) => {
-        console.error('reCAPTCHA render error:', error);
-        setStatusMessage('Failed to load verification. Refresh page.');
+        console.error('reCAPTCHA setup error:', error);
+        // Try again without rendering
+        setRecaptchaVerifier(verifier);
       });
     } catch (error: any) {
       console.error('Error setting up reCAPTCHA:', error);
-      setStatusMessage('Error: ' + error.message);
+      setStatusMessage('Setup error. Please refresh the page.');
     }
   };
 
@@ -93,7 +93,9 @@ export default function LoginScreen() {
     }
 
     if (!recaptchaVerifier) {
-      Alert.alert('Error', 'Verification not loaded. Please refresh the page.');
+      setStatusMessage('Please wait, loading...');
+      setupInvisibleRecaptcha();
+      setTimeout(() => handleSendOTP(), 1000);
       return;
     }
 
@@ -102,14 +104,14 @@ export default function LoginScreen() {
     
     try {
       const formattedNumber = phoneNumber.startsWith('+91') ? phoneNumber : `+91${phoneNumber}`;
-      console.log('Attempting to send OTP to:', formattedNumber);
+      console.log('Sending OTP to:', formattedNumber);
       
       const result = await signInWithPhoneNumber(auth, formattedNumber, recaptchaVerifier);
-      console.log('OTP sent successfully!', result);
+      console.log('OTP sent successfully!');
       setConfirmationResult(result);
       setStep('otp');
       setStatusMessage('');
-      Alert.alert('OTP Sent', `OTP has been sent to ${formattedNumber}. Please check your SMS.`);
+      Alert.alert('OTP Sent!', `A verification code has been sent to ${formattedNumber}`);
     } catch (error: any) {
       console.error('OTP Error:', error.code, error.message);
       let errorMessage = 'Failed to send OTP.';
@@ -117,18 +119,16 @@ export default function LoginScreen() {
       if (error.code === 'auth/invalid-phone-number') {
         errorMessage = 'Invalid phone number. Please enter a valid Indian mobile number.';
       } else if (error.code === 'auth/too-many-requests') {
-        errorMessage = 'Too many attempts. Please try again after some time.';
+        errorMessage = 'Too many attempts. Please try again later.';
       } else if (error.code === 'auth/quota-exceeded') {
-        errorMessage = 'SMS quota exceeded. Please use Google Sign-In instead.';
-      } else if (error.code === 'auth/captcha-check-failed') {
-        errorMessage = 'Verification failed. Please complete the reCAPTCHA again.';
-        setupRecaptcha();
-      } else if (error.code === 'auth/missing-phone-number') {
-        errorMessage = 'Please enter your phone number.';
+        errorMessage = 'SMS quota exceeded. Please try Google Sign-In.';
       } else if (error.code === 'auth/operation-not-allowed') {
-        errorMessage = 'Phone authentication is not enabled. Please use Google Sign-In or Demo User.';
+        errorMessage = 'Phone authentication is not enabled in Firebase. Please enable it in Firebase Console.';
+      } else if (error.code === 'auth/captcha-check-failed') {
+        errorMessage = 'Verification failed. Please try again.';
+        setupInvisibleRecaptcha();
       } else {
-        errorMessage = `Error: ${error.message || error.code || 'Unknown error'}`;
+        errorMessage = error.message || 'Unknown error occurred';
       }
       
       setStatusMessage(errorMessage);
@@ -150,15 +150,19 @@ export default function LoginScreen() {
     }
 
     setLoading(true);
+    setStatusMessage('Verifying...');
     try {
       const success = await verifyOTP(confirmationResult, otp);
       if (success) {
+        setStatusMessage('');
         router.replace('/(tabs)');
       } else {
+        setStatusMessage('Invalid OTP');
         Alert.alert('Error', 'Invalid OTP. Please check and try again.');
       }
     } catch (error: any) {
       console.error('Verify OTP Error:', error);
+      setStatusMessage('Verification failed');
       Alert.alert('Error', error.message || 'Failed to verify OTP');
     } finally {
       setLoading(false);
@@ -229,17 +233,10 @@ export default function LoginScreen() {
 
                 {/* Status Message */}
                 {statusMessage ? (
-                  <Text style={[styles.statusText, statusMessage.includes('✓') ? styles.successText : styles.infoText]}>
-                    {statusMessage}
-                  </Text>
-                ) : null}
-
-                {/* reCAPTCHA Container */}
-                {Platform.OS === 'web' && (
-                  <View style={styles.recaptchaWrapper}>
-                    <View nativeID="recaptcha-container" style={styles.recaptchaBox} />
+                  <View style={styles.statusContainer}>
+                    <Text style={styles.statusText}>{statusMessage}</Text>
                   </View>
-                )}
+                ) : null}
 
                 <TouchableOpacity
                   style={[styles.button, loading && styles.buttonDisabled]}
@@ -267,6 +264,13 @@ export default function LoginScreen() {
                   autoFocus
                 />
 
+                {/* Status Message */}
+                {statusMessage ? (
+                  <View style={styles.statusContainer}>
+                    <Text style={styles.statusText}>{statusMessage}</Text>
+                  </View>
+                ) : null}
+
                 <TouchableOpacity
                   style={[styles.button, loading && styles.buttonDisabled]}
                   onPress={handleVerifyOTP}
@@ -281,7 +285,7 @@ export default function LoginScreen() {
 
                 <TouchableOpacity
                   style={styles.resendButton}
-                  onPress={() => { setStep('phone'); setOtp(''); setConfirmationResult(null); setupRecaptcha(); }}
+                  onPress={() => { setStep('phone'); setOtp(''); setConfirmationResult(null); setStatusMessage(''); setupInvisibleRecaptcha(); }}
                 >
                   <Text style={styles.resendText}>Change Number</Text>
                 </TouchableOpacity>
@@ -312,6 +316,9 @@ export default function LoginScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* Invisible reCAPTCHA container */}
+          <View nativeID="recaptcha-container" style={styles.recaptchaContainer} />
+
           <View style={styles.footer}>
             <Text style={styles.footerText}>By continuing, you agree to our Terms of Service</Text>
           </View>
@@ -324,35 +331,33 @@ export default function LoginScreen() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#fff' },
   keyboardView: { flex: 1 },
-  scrollContent: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 20, paddingBottom: 24 },
-  header: { alignItems: 'center', marginBottom: 24 },
-  logoContainer: { width: 70, height: 70, borderRadius: 35, backgroundColor: '#FFF3E0', justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
-  title: { fontSize: 28, fontWeight: 'bold', color: '#333', marginBottom: 4 },
-  subtitle: { fontSize: 14, color: '#666', textAlign: 'center' },
+  scrollContent: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 30, paddingBottom: 24 },
+  header: { alignItems: 'center', marginBottom: 32 },
+  logoContainer: { width: 80, height: 80, borderRadius: 40, backgroundColor: '#FFF3E0', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  title: { fontSize: 32, fontWeight: 'bold', color: '#333', marginBottom: 8 },
+  subtitle: { fontSize: 16, color: '#666', textAlign: 'center' },
   form: { flex: 1 },
-  label: { fontSize: 14, color: '#333', marginBottom: 10, fontWeight: '500' },
-  phoneInputContainer: { flexDirection: 'row', marginBottom: 12 },
+  label: { fontSize: 15, color: '#333', marginBottom: 12, fontWeight: '500' },
+  phoneInputContainer: { flexDirection: 'row', marginBottom: 16 },
   countryCode: { backgroundColor: '#f5f5f5', paddingHorizontal: 16, justifyContent: 'center', borderRadius: 12, marginRight: 10 },
   countryCodeText: { fontSize: 16, color: '#333', fontWeight: '500' },
-  phoneInput: { flex: 1, backgroundColor: '#f5f5f5', paddingHorizontal: 16, paddingVertical: 14, borderRadius: 12, fontSize: 16, color: '#333' },
-  statusText: { fontSize: 13, textAlign: 'center', marginBottom: 12, padding: 8, borderRadius: 8 },
-  successText: { color: '#4CAF50', backgroundColor: '#E8F5E9' },
-  infoText: { color: '#FF5722', backgroundColor: '#FFF3E0' },
-  recaptchaWrapper: { marginBottom: 12, alignItems: 'center' },
-  recaptchaBox: { minHeight: 78 },
-  otpInput: { backgroundColor: '#f5f5f5', paddingHorizontal: 16, paddingVertical: 16, borderRadius: 12, fontSize: 24, color: '#333', textAlign: 'center', letterSpacing: 12, marginBottom: 16 },
-  button: { backgroundColor: '#FF5722', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginBottom: 12 },
+  phoneInput: { flex: 1, backgroundColor: '#f5f5f5', paddingHorizontal: 16, paddingVertical: 16, borderRadius: 12, fontSize: 18, color: '#333' },
+  statusContainer: { backgroundColor: '#FFF3E0', padding: 12, borderRadius: 10, marginBottom: 16 },
+  statusText: { fontSize: 14, color: '#FF5722', textAlign: 'center' },
+  otpInput: { backgroundColor: '#f5f5f5', paddingHorizontal: 16, paddingVertical: 18, borderRadius: 12, fontSize: 28, color: '#333', textAlign: 'center', letterSpacing: 12, marginBottom: 16 },
+  button: { backgroundColor: '#FF5722', paddingVertical: 18, borderRadius: 12, alignItems: 'center', marginBottom: 12 },
   buttonDisabled: { backgroundColor: '#FFB299' },
-  buttonText: { color: '#fff', fontSize: 16, fontWeight: '600' },
+  buttonText: { color: '#fff', fontSize: 18, fontWeight: '600' },
   resendButton: { alignItems: 'center', paddingVertical: 12 },
-  resendText: { color: '#FF5722', fontSize: 14 },
-  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 16 },
+  resendText: { color: '#FF5722', fontSize: 15 },
+  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 24 },
   dividerLine: { flex: 1, height: 1, backgroundColor: '#e0e0e0' },
   dividerText: { color: '#999', paddingHorizontal: 16, fontSize: 14 },
   googleButton: { backgroundColor: '#4285F4', paddingVertical: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   googleButtonText: { color: '#fff', fontSize: 16, fontWeight: '600', marginLeft: 10 },
   demoButton: { backgroundColor: '#FFF3E0', paddingVertical: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#FF5722' },
   demoButtonText: { color: '#FF5722', fontSize: 16, fontWeight: '600', marginLeft: 10 },
-  footer: { marginTop: 16, alignItems: 'center' },
+  recaptchaContainer: { position: 'absolute', bottom: 0, left: 0, opacity: 0 },
+  footer: { marginTop: 24, alignItems: 'center' },
   footerText: { fontSize: 12, color: '#999', textAlign: 'center' },
 });
