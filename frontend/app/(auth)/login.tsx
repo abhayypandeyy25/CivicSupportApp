@@ -18,10 +18,6 @@ import { useAuth } from '../../src/context/AuthContext';
 import { ConfirmationResult, RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
 import { auth } from '../../src/config/firebase';
 
-// Global variable to track recaptcha state
-let recaptchaVerifierInstance: RecaptchaVerifier | null = null;
-let isRecaptchaRendered = false;
-
 export default function LoginScreen() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState('');
@@ -29,70 +25,57 @@ export default function LoginScreen() {
   const [loading, setLoading] = useState(false);
   const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
   const [recaptchaReady, setRecaptchaReady] = useState(false);
+  const [recaptchaVerifier, setRecaptchaVerifier] = useState<RecaptchaVerifier | null>(null);
   const router = useRouter();
   const { verifyOTP, signInWithGoogle, user } = useAuth();
-  const recaptchaContainerRef = useRef<View>(null);
 
-  // Initialize reCAPTCHA on web - only once
+  // Initialize reCAPTCHA on web
   useEffect(() => {
     if (Platform.OS === 'web') {
-      initializeRecaptcha();
+      setupRecaptcha();
     }
     
     return () => {
-      // Don't clear on unmount - keep the instance
+      // Cleanup on unmount
+      if (recaptchaVerifier) {
+        try {
+          recaptchaVerifier.clear();
+        } catch (e) {
+          // Ignore
+        }
+      }
     };
   }, []);
 
-  const initializeRecaptcha = async () => {
-    // If already rendered, just mark as ready
-    if (isRecaptchaRendered && recaptchaVerifierInstance) {
-      setRecaptchaReady(true);
-      return;
-    }
-
+  const setupRecaptcha = () => {
     try {
-      // Clear any existing verifier first
-      if (recaptchaVerifierInstance) {
-        try {
-          recaptchaVerifierInstance.clear();
-        } catch (e) {
-          // Ignore clear errors
-        }
-        recaptchaVerifierInstance = null;
-        isRecaptchaRendered = false;
-      }
-
-      // Clear the container
+      // Clear any existing recaptcha
       const container = document.getElementById('recaptcha-container');
       if (container) {
         container.innerHTML = '';
       }
 
-      // Create new verifier
-      recaptchaVerifierInstance = new RecaptchaVerifier(auth, 'recaptcha-container', {
-        size: 'invisible',
-        callback: () => {
-          console.log('reCAPTCHA solved');
+      const verifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        size: 'normal', // Use normal size so user can see and interact with it
+        callback: (response: any) => {
+          console.log('reCAPTCHA verified!');
+          setRecaptchaReady(true);
         },
         'expired-callback': () => {
           console.log('reCAPTCHA expired');
-          isRecaptchaRendered = false;
           setRecaptchaReady(false);
+          Alert.alert('Verification Expired', 'Please complete the verification again.');
         }
       });
 
-      await recaptchaVerifierInstance.render();
-      isRecaptchaRendered = true;
-      setRecaptchaReady(true);
-      console.log('reCAPTCHA initialized successfully');
-    } catch (error: any) {
+      verifier.render().then(() => {
+        console.log('reCAPTCHA rendered');
+        setRecaptchaVerifier(verifier);
+      }).catch((error) => {
+        console.error('reCAPTCHA render error:', error);
+      });
+    } catch (error) {
       console.error('Error setting up reCAPTCHA:', error);
-      // If it's already rendered error, that's fine
-      if (error.message?.includes('already been rendered')) {
-        isRecaptchaRendered = true;
-        setRecaptchaReady(true);
-      }
     }
   };
 
@@ -118,10 +101,13 @@ export default function LoginScreen() {
       return;
     }
 
-    if (!recaptchaVerifierInstance || !isRecaptchaRendered) {
-      Alert.alert('Error', 'Please wait for verification to load and try again.');
-      // Try to reinitialize
-      await initializeRecaptcha();
+    if (!recaptchaReady) {
+      Alert.alert('Verification Required', 'Please complete the "I\'m not a robot" verification first, then click Send OTP.');
+      return;
+    }
+
+    if (!recaptchaVerifier) {
+      Alert.alert('Error', 'Verification not loaded. Please refresh the page.');
       return;
     }
 
@@ -130,25 +116,24 @@ export default function LoginScreen() {
       const formattedNumber = phoneNumber.startsWith('+91') ? phoneNumber : `+91${phoneNumber}`;
       console.log('Sending OTP to:', formattedNumber);
       
-      const result = await signInWithPhoneNumber(auth, formattedNumber, recaptchaVerifierInstance);
+      const result = await signInWithPhoneNumber(auth, formattedNumber, recaptchaVerifier);
       setConfirmationResult(result);
       setStep('otp');
-      Alert.alert('OTP Sent', `OTP has been sent to ${formattedNumber}`);
+      Alert.alert('OTP Sent', `OTP has been sent to ${formattedNumber}. Please check your SMS.`);
     } catch (error: any) {
       console.error('OTP Error:', error);
       let errorMessage = 'Failed to send OTP. Please try again.';
       
       if (error.code === 'auth/invalid-phone-number') {
-        errorMessage = 'Invalid phone number format. Please check and try again.';
+        errorMessage = 'Invalid phone number format. Please enter a valid Indian mobile number.';
       } else if (error.code === 'auth/too-many-requests') {
-        errorMessage = 'Too many attempts. Please try again later.';
+        errorMessage = 'Too many attempts. Please try again after some time.';
       } else if (error.code === 'auth/quota-exceeded') {
-        errorMessage = 'SMS quota exceeded. Please try again later.';
-      } else if (error.message?.includes('already been rendered')) {
-        // reCAPTCHA already rendered - try again
-        errorMessage = 'Verification error. Please try again.';
-        isRecaptchaRendered = true;
-        setRecaptchaReady(true);
+        errorMessage = 'SMS quota exceeded. Please try again later or use Google Sign-In.';
+      } else if (error.code === 'auth/captcha-check-failed') {
+        errorMessage = 'Verification failed. Please complete the reCAPTCHA again.';
+        setRecaptchaReady(false);
+        setupRecaptcha();
       } else if (error.message) {
         errorMessage = error.message;
       }
@@ -176,11 +161,17 @@ export default function LoginScreen() {
       if (success) {
         router.replace('/(tabs)');
       } else {
-        Alert.alert('Error', 'Invalid OTP. Please try again.');
+        Alert.alert('Error', 'Invalid OTP. Please check and try again.');
       }
     } catch (error: any) {
       console.error('Verify OTP Error:', error);
-      Alert.alert('Error', error.message || 'Failed to verify OTP');
+      let errorMessage = 'Failed to verify OTP.';
+      if (error.code === 'auth/invalid-verification-code') {
+        errorMessage = 'Invalid OTP. Please check the code and try again.';
+      } else if (error.code === 'auth/code-expired') {
+        errorMessage = 'OTP has expired. Please request a new one.';
+      }
+      Alert.alert('Error', errorMessage);
     } finally {
       setLoading(false);
     }
@@ -191,7 +182,6 @@ export default function LoginScreen() {
     try {
       const success = await signInWithGoogle();
       if (success) {
-        // Will redirect or popup will handle
         setTimeout(() => {
           if (!user) {
             setLoading(false);
@@ -214,7 +204,7 @@ export default function LoginScreen() {
       } else if (error.code === 'auth/popup-blocked') {
         errorMessage = 'Popup was blocked. Please allow popups and try again.';
       } else if (error.code === 'auth/unauthorized-domain') {
-        errorMessage = 'Domain not authorized. Please add "civicwatch-21.preview.emergentagent.com" in Firebase Console → Authentication → Settings → Authorized domains.';
+        errorMessage = 'Domain not authorized in Firebase. Please contact support.';
       } else if (error.message) {
         errorMessage = error.message;
       }
@@ -224,7 +214,6 @@ export default function LoginScreen() {
     }
   };
 
-  // Demo login for testing
   const handleDemoLogin = () => {
     router.replace('/(tabs)');
   };
@@ -233,6 +222,8 @@ export default function LoginScreen() {
     setStep('phone');
     setOtp('');
     setConfirmationResult(null);
+    setRecaptchaReady(false);
+    setupRecaptcha();
   };
 
   return (
@@ -276,8 +267,21 @@ export default function LoginScreen() {
                   />
                 </View>
 
+                {/* reCAPTCHA Container - Visible */}
+                {Platform.OS === 'web' && (
+                  <View style={styles.recaptchaWrapper}>
+                    <Text style={styles.recaptchaLabel}>
+                      {recaptchaReady ? '✓ Verified! Now click Send OTP' : 'Complete verification below:'}
+                    </Text>
+                    <View nativeID="recaptcha-container" style={styles.recaptchaBox} />
+                  </View>
+                )}
+
                 <TouchableOpacity
-                  style={[styles.button, loading && styles.buttonDisabled]}
+                  style={[
+                    styles.button, 
+                    (loading || (Platform.OS === 'web' && !recaptchaReady)) && styles.buttonDisabled
+                  ]}
                   onPress={handleSendOTP}
                   disabled={loading}
                 >
@@ -287,12 +291,6 @@ export default function LoginScreen() {
                     <Text style={styles.buttonText}>Send OTP</Text>
                   )}
                 </TouchableOpacity>
-                
-                {Platform.OS === 'web' && (
-                  <Text style={[styles.hintText, { color: recaptchaReady ? '#4CAF50' : '#FF9800' }]}>
-                    {recaptchaReady ? '✓ Verification ready' : 'Loading verification...'}
-                  </Text>
-                )}
               </>
             ) : (
               <>
@@ -305,6 +303,7 @@ export default function LoginScreen() {
                   maxLength={6}
                   value={otp}
                   onChangeText={setOtp}
+                  autoFocus
                 />
 
                 <TouchableOpacity
@@ -351,7 +350,7 @@ export default function LoginScreen() {
               )}
             </TouchableOpacity>
 
-            {/* Demo Login - For testing */}
+            {/* Demo Login */}
             <TouchableOpacity
               style={styles.demoButton}
               onPress={handleDemoLogin}
@@ -360,9 +359,6 @@ export default function LoginScreen() {
               <Text style={styles.demoButtonText}>Continue as Demo User</Text>
             </TouchableOpacity>
           </View>
-
-          {/* Recaptcha container for web */}
-          <View nativeID="recaptcha-container" ref={recaptchaContainerRef} />
 
           {/* Footer */}
           <View style={styles.footer}>
@@ -387,30 +383,30 @@ const styles = StyleSheet.create({
   scrollContent: {
     flexGrow: 1,
     paddingHorizontal: 24,
-    paddingTop: 40,
+    paddingTop: 30,
     paddingBottom: 24,
   },
   header: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 30,
   },
   logoContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 70,
+    height: 70,
+    borderRadius: 35,
     backgroundColor: '#FFF3E0',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 12,
   },
   title: {
-    fontSize: 32,
+    fontSize: 28,
     fontWeight: 'bold',
     color: '#333',
-    marginBottom: 8,
+    marginBottom: 6,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#666',
     textAlign: 'center',
   },
@@ -423,14 +419,9 @@ const styles = StyleSheet.create({
     marginBottom: 12,
     fontWeight: '500',
   },
-  hintText: {
-    fontSize: 12,
-    textAlign: 'center',
-    marginTop: 8,
-  },
   phoneInputContainer: {
     flexDirection: 'row',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   countryCode: {
     backgroundColor: '#f5f5f5',
@@ -448,17 +439,32 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#f5f5f5',
     paddingHorizontal: 16,
-    paddingVertical: 16,
+    paddingVertical: 14,
     borderRadius: 12,
     fontSize: 16,
     color: '#333',
+  },
+  recaptchaWrapper: {
+    marginBottom: 16,
+    alignItems: 'center',
+  },
+  recaptchaLabel: {
+    fontSize: 13,
+    color: '#666',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  recaptchaBox: {
+    minHeight: 78,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   otpInput: {
     backgroundColor: '#f5f5f5',
     paddingHorizontal: 16,
     paddingVertical: 16,
     borderRadius: 12,
-    fontSize: 18,
+    fontSize: 20,
     color: '#333',
     textAlign: 'center',
     letterSpacing: 8,
@@ -490,7 +496,7 @@ const styles = StyleSheet.create({
   divider: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 24,
+    marginVertical: 20,
   },
   dividerLine: {
     flex: 1,
@@ -534,7 +540,7 @@ const styles = StyleSheet.create({
     marginLeft: 10,
   },
   footer: {
-    marginTop: 24,
+    marginTop: 20,
     alignItems: 'center',
   },
   footerText: {
