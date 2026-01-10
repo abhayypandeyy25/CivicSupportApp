@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { apiService, GovtOfficial } from '../../src/services/api';
 import axios from 'axios';
+import * as DocumentPicker from 'expo-document-picker';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 
@@ -62,6 +63,7 @@ export default function AdminScreen() {
     categories: [],
   });
   const [submitting, setSubmitting] = useState(false);
+  const [importing, setImporting] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -117,6 +119,108 @@ export default function AdminScreen() {
         ? prev.categories.filter(c => c !== cat)
         : [...prev.categories, cat]
     }));
+  };
+
+  const handleCSVImport = async () => {
+    try {
+      // Pick CSV file
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'text/csv',
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      setImporting(true);
+
+      // Read the file content
+      const file = result.assets[0];
+      const response = await fetch(file.uri);
+      const csvContent = await response.text();
+
+      // Send to backend
+      const importResponse = await axios.post(
+        `${API_BASE_URL}/api/admin/officials/bulk-import-csv`,
+        { csv_content: csvContent },
+        {
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        }
+      );
+
+      const data = importResponse.data;
+
+      // Show results
+      let message = `Successfully imported ${data.created_count} officials`;
+
+      // Show auto-created items
+      if (data.new_categories && data.new_categories.length > 0) {
+        message += `\n\n✨ Auto-created ${data.new_categories.length} new categories:`;
+        message += '\n' + data.new_categories.slice(0, 3).join(', ');
+        if (data.new_categories.length > 3) {
+          message += ` +${data.new_categories.length - 3} more`;
+        }
+      }
+
+      if (data.new_hierarchy_levels && Object.keys(data.new_hierarchy_levels).length > 0) {
+        const levels = Object.entries(data.new_hierarchy_levels);
+        message += `\n\n✨ Auto-created ${levels.length} new hierarchy levels:`;
+        levels.forEach(([name, level]: [string, any]) => {
+          message += `\n  ${name} = Level ${level}`;
+        });
+      }
+
+      if (data.error_count > 0) {
+        message += `\n\n⚠️ Errors: ${data.error_count}`;
+        if (data.errors && data.errors.length > 0) {
+          message += '\n' + data.errors.slice(0, 3).map((e: any) =>
+            `Row ${e.row}: ${e.error}`
+          ).join('\n');
+          if (data.errors.length > 3) {
+            message += `\n...and ${data.errors.length - 3} more errors`;
+          }
+        }
+      }
+
+      Alert.alert(
+        data.error_count > 0 ? 'Import Completed with Errors' : 'Success',
+        message
+      );
+
+      // Refresh the list
+      fetchOfficials();
+
+    } catch (error: any) {
+      console.error('CSV import error:', error);
+      Alert.alert(
+        'Import Failed',
+        error.response?.data?.detail || 'Failed to import CSV file. Admin authentication required.'
+      );
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const downloadCSVTemplate = () => {
+    const templateText = `CSV Template Format:
+
+name,email,phone,designation,department,hierarchy_level,area,categories
+
+Example:
+Rajesh Kumar,rajesh@mcd.gov.in,+919876543210,Ward Councillor,Municipal Corporation,1,Dwarka,"roads,sanitation"
+
+Hierarchy Levels:
+1 = Parshad, 2 = MCD, 3 = IAS, 4 = MLA, 5 = MP, 6 = CM, 7 = PM
+
+Available Categories:
+roads, sanitation, water, electricity, encroachment, parks, public_safety, health, education, transport, housing, general`;
+
+    Alert.alert('CSV Template', templateText, [
+      { text: 'OK' }
+    ]);
   };
 
   const renderOfficialItem = ({ item }: { item: GovtOfficial }) => (
@@ -314,12 +418,39 @@ export default function AdminScreen() {
         </View>
       </View>
 
-      {/* Add Button */}
+      {/* Action Buttons */}
       {!showForm && (
-        <TouchableOpacity style={styles.addButton} onPress={() => setShowForm(true)}>
-          <Ionicons name="add" size={20} color="#fff" />
-          <Text style={styles.addButtonText}>Add New Official</Text>
-        </TouchableOpacity>
+        <View style={styles.actionButtonsContainer}>
+          <TouchableOpacity style={styles.addButton} onPress={() => setShowForm(true)}>
+            <Ionicons name="add" size={20} color="#fff" />
+            <Text style={styles.addButtonText}>Add New Official</Text>
+          </TouchableOpacity>
+
+          <View style={styles.csvButtonsRow}>
+            <TouchableOpacity
+              style={[styles.csvButton, importing && styles.csvButtonDisabled]}
+              onPress={handleCSVImport}
+              disabled={importing}
+            >
+              {importing ? (
+                <ActivityIndicator color="#FF5722" size="small" />
+              ) : (
+                <>
+                  <Ionicons name="cloud-upload-outline" size={18} color="#FF5722" />
+                  <Text style={styles.csvButtonText}>Import CSV</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={styles.csvButton}
+              onPress={downloadCSVTemplate}
+            >
+              <Ionicons name="document-text-outline" size={18} color="#FF5722" />
+              <Text style={styles.csvButtonText}>Template</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       )}
 
       {/* Form or List */}
@@ -399,20 +530,47 @@ const styles = StyleSheet.create({
     color: '#999',
     marginTop: 4,
   },
+  actionButtonsContainer: {
+    marginHorizontal: 16,
+    marginBottom: 16,
+  },
   addButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#FF5722',
-    marginHorizontal: 16,
-    marginBottom: 16,
     padding: 14,
     borderRadius: 12,
+    marginBottom: 12,
   },
   addButtonText: {
     color: '#fff',
     fontWeight: '600',
     marginLeft: 8,
+  },
+  csvButtonsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  csvButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#fff',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FF5722',
+  },
+  csvButtonDisabled: {
+    opacity: 0.5,
+  },
+  csvButtonText: {
+    color: '#FF5722',
+    fontWeight: '600',
+    marginLeft: 6,
+    fontSize: 13,
   },
   listContent: {
     paddingHorizontal: 16,

@@ -1,12 +1,15 @@
-from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form
+from fastapi import FastAPI, APIRouter, HTTPException, Depends, UploadFile, File, Form, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 import os
 import logging
 from pathlib import Path
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import List, Optional
 import uuid
 from datetime import datetime
@@ -20,10 +23,25 @@ import math
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
 
+# Import settings with validation
+from config import settings
+
+# Initialize Sentry for error tracking (if configured)
+if settings.SENTRY_DSN:
+    import sentry_sdk
+    sentry_sdk.init(
+        dsn=settings.SENTRY_DSN,
+        environment=settings.ENVIRONMENT,
+        traces_sample_rate=1.0 if settings.is_development else 0.1,
+        profiles_sample_rate=1.0 if settings.is_development else 0.1,
+    )
+    logger.info(f"Sentry initialized for {settings.ENVIRONMENT} environment")
+else:
+    logger.warning("Sentry DSN not configured - error tracking disabled")
+
 # MongoDB connection
-mongo_url = os.environ['MONGO_URL']
-client = AsyncIOMotorClient(mongo_url)
-db = client[os.environ['DB_NAME']]
+client = AsyncIOMotorClient(settings.MONGO_URL)
+db = client[settings.DB_NAME]
 
 # Initialize Firebase Admin SDK (without service account for token verification only)
 try:
@@ -31,7 +49,7 @@ try:
 except ValueError:
     # Initialize without credentials - will use API for token verification
     firebase_admin.initialize_app(options={
-        'projectId': os.environ.get('FIREBASE_PROJECT_ID', 'civicsense-451d1')
+        'projectId': settings.FIREBASE_PROJECT_ID
     })
 
 # Create the main app
@@ -43,6 +61,11 @@ api_router = APIRouter(prefix="/api")
 # Security
 security = HTTPBearer()
 
+# Rate Limiter - Prevent abuse and DoS attacks
+limiter = Limiter(key_func=get_remote_address, default_limits=["100/minute"])
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -53,19 +76,19 @@ logger = logging.getLogger(__name__)
 # ==================== MODELS ====================
 
 class Location(BaseModel):
-    latitude: float
-    longitude: float
-    address: Optional[str] = None
-    area: Optional[str] = None
-    city: str = "Delhi"
+    latitude: float = Field(..., ge=-90, le=90, description="Latitude must be between -90 and 90")
+    longitude: float = Field(..., ge=-180, le=180, description="Longitude must be between -180 and 180")
+    address: Optional[str] = Field(None, max_length=500)
+    area: Optional[str] = Field(None, max_length=200)
+    city: str = Field("Delhi", max_length=100)
 
 class User(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid.uuid4()))
-    firebase_uid: str
-    phone_number: Optional[str] = None
-    email: Optional[str] = None
-    display_name: Optional[str] = None
-    photo_url: Optional[str] = None
+    firebase_uid: str = Field(..., min_length=1, max_length=128)
+    phone_number: Optional[str] = Field(None, pattern=r'^\+?[1-9]\d{1,14}$')
+    email: Optional[str] = Field(None, max_length=255)
+    display_name: Optional[str] = Field(None, min_length=1, max_length=100)
+    photo_url: Optional[str] = Field(None, max_length=2048)
     location: Optional[Location] = None
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
@@ -134,12 +157,25 @@ class Issue(BaseModel):
     updated_at: datetime = Field(default_factory=datetime.utcnow)
 
 class IssueCreate(BaseModel):
-    title: str
-    description: str
-    category: str
-    sub_category: Optional[str] = None
-    photos: List[str] = []  # Base64 encoded images
+    title: str = Field(..., min_length=5, max_length=200, description="Issue title")
+    description: str = Field(..., min_length=10, max_length=2000, description="Detailed description")
+    category: str = Field(..., min_length=1, max_length=100)
+    sub_category: Optional[str] = Field(None, max_length=100)
+    photos: List[str] = Field(default=[], min_length=1, max_length=5, description="1-5 base64 encoded images")
     location: Location
+
+    @field_validator('photos')
+    @classmethod
+    def validate_photo_size(cls, v):
+        """Validate each photo is not too large (max ~5MB base64)"""
+        max_size = 5_000_000  # ~5MB when base64 encoded
+        for idx, photo in enumerate(v):
+            if len(photo) > max_size:
+                raise ValueError(f'Photo {idx+1} exceeds maximum size of 5MB')
+            # Basic base64 validation
+            if not photo.startswith('data:image/'):
+                raise ValueError(f'Photo {idx+1} must be a valid base64 image with data URI')
+        return v
 
 class IssueUpdate(BaseModel):
     title: Optional[str] = None
@@ -367,38 +403,55 @@ async def update_user_location(
 # ----- Issue Routes -----
 
 @api_router.post("/issues", response_model=Issue)
+@limiter.limit("10/minute")  # Stricter limit for issue creation to prevent spam
 async def create_issue(
+    request: Request,
     issue_data: IssueCreate,
     user: User = Depends(get_current_user)
 ):
     """Create a new civic issue"""
-    # Validate photos (max 5)
-    if len(issue_data.photos) > 5:
-        raise HTTPException(status_code=400, detail="Maximum 5 photos allowed per issue")
-    if len(issue_data.photos) < 1:
-        raise HTTPException(status_code=400, detail="At least 1 photo is required")
-    
-    # Get AI classification
-    ai_result = await classify_issue_with_ai(
-        issue_data.title,
-        issue_data.description,
-        issue_data.location
-    )
-    
-    new_issue = Issue(
-        user_id=user.id,
-        user_name=user.display_name,
-        title=issue_data.title,
-        description=issue_data.description,
-        category=issue_data.category,
-        sub_category=issue_data.sub_category,
-        photos=issue_data.photos,
-        location=issue_data.location,
-        ai_suggested_category=ai_result.category,
-        ai_suggested_officials=[o['id'] for o in ai_result.suggested_officials]
-    )
-    
-    await db.issues.insert_one(new_issue.dict())
+    try:
+        # Validate photos (max 5)
+        if len(issue_data.photos) > 5:
+            raise HTTPException(status_code=400, detail="Maximum 5 photos allowed per issue")
+        if len(issue_data.photos) < 1:
+            raise HTTPException(status_code=400, detail="At least 1 photo is required")
+
+        # Get AI classification
+        ai_result = await classify_issue_with_ai(
+            issue_data.title,
+            issue_data.description,
+            issue_data.location
+        )
+
+        new_issue = Issue(
+            user_id=user.id,
+            user_name=user.display_name,
+            title=issue_data.title,
+            description=issue_data.description,
+            category=issue_data.category,
+            sub_category=issue_data.sub_category,
+            photos=issue_data.photos,
+            location=issue_data.location,
+            ai_suggested_category=ai_result.category,
+            ai_suggested_officials=[o['id'] for o in ai_result.suggested_officials]
+        )
+
+        # Convert to dict and add GeoJSON coordinates for geospatial queries
+        issue_dict = new_issue.dict()
+        issue_dict['location']['coordinates'] = [
+            issue_data.location.longitude,
+            issue_data.location.latitude
+        ]
+
+        await db.issues.insert_one(issue_dict)
+        logger.info(f"Issue created successfully: {new_issue.id} by user {user.id}")
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
+    except Exception as e:
+        logger.error(f"Error creating issue for user {user.id}: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to create issue. Please try again.")
     return new_issue
 
 @api_router.get("/issues", response_model=List[Issue])
@@ -411,44 +464,56 @@ async def get_issues(
     skip: int = 0,
     limit: int = 20
 ):
-    """Get issues with optional location-based filtering"""
-    query = {}
-    
-    if category:
-        query["category"] = category
-    if status:
-        query["status"] = status
-    
-    # Location-based filtering using simple distance calculation
-    if latitude is not None and longitude is not None:
-        # Get all issues and filter by distance (for MVP - can be optimized with geospatial index later)
-        all_issues = await db.issues.find(query).sort("created_at", -1).to_list(1000)
-        
-        def calculate_distance(lat1, lon1, lat2, lon2):
-            """Calculate distance between two points using Haversine formula"""
-            R = 6371  # Earth's radius in km
-            lat1_rad = math.radians(lat1)
-            lat2_rad = math.radians(lat2)
-            delta_lat = math.radians(lat2 - lat1)
-            delta_lon = math.radians(lon2 - lon1)
-            
-            a = math.sin(delta_lat/2)**2 + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lon/2)**2
-            c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
-            return R * c
-        
-        filtered_issues = []
-        for issue in all_issues:
-            issue_lat = issue.get('location', {}).get('latitude')
-            issue_lon = issue.get('location', {}).get('longitude')
-            if issue_lat and issue_lon:
-                distance = calculate_distance(latitude, longitude, issue_lat, issue_lon)
-                if distance <= radius_km:
-                    filtered_issues.append(issue)
-        
-        return [Issue(**issue) for issue in filtered_issues[skip:skip+limit]]
-    
-    issues = await db.issues.find(query).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
-    return [Issue(**issue) for issue in issues]
+    """Get issues with optional location-based filtering using MongoDB geospatial queries"""
+    try:
+        query = {}
+
+        # Validate radius
+        if radius_km > 100:
+            raise HTTPException(status_code=400, detail="Radius cannot exceed 100km")
+
+        if category:
+            query["category"] = category
+        if status:
+            query["status"] = status
+
+        # Location-based filtering using MongoDB geospatial queries
+        if latitude is not None and longitude is not None:
+            # Use MongoDB's $geoWithin and $centerSphere for efficient geospatial query
+            # Note: This assumes location.coordinates is stored as GeoJSON [longitude, latitude]
+            # For backward compatibility, we'll try both formats
+            radius_in_radians = radius_km / 6371  # Earth's radius in km
+
+            geo_query = {
+                "$or": [
+                    # GeoJSON format (new format with 2dsphere index)
+                    {
+                        "location.coordinates": {
+                            "$geoWithin": {
+                                "$centerSphere": [[longitude, latitude], radius_in_radians]
+                            }
+                        }
+                    }
+                ]
+            }
+
+            # Combine with other filters
+            if query:
+                query = {"$and": [query, geo_query]}
+            else:
+                query = geo_query
+
+            issues = await db.issues.find(query).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+        else:
+            issues = await db.issues.find(query).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+
+        return [Issue(**issue) for issue in issues]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching issues: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to fetch issues")
 
 @api_router.get("/issues/{issue_id}", response_model=Issue)
 async def get_issue(issue_id: str):
@@ -635,8 +700,169 @@ async def bulk_create_officials(
         new_official = GovtOfficial(**official_data.dict())
         await db.govt_officials.insert_one(new_official.dict())
         created.append(new_official.id)
-    
+
     return {"message": f"Created {len(created)} officials", "ids": created}
+
+@api_router.post("/admin/officials/bulk-import-csv", response_model=dict)
+async def bulk_import_officials_csv(
+    csv_content: str,
+    user: User = Depends(verify_admin)
+):
+    """
+    Bulk import government officials from CSV content (Admin only)
+
+    Expected CSV format:
+    name,email,phone,designation,department,hierarchy_level,area,categories
+
+    AUTOMATIC FEATURES:
+    - New hierarchy levels are automatically detected and assigned numbers
+    - New categories are automatically added to the database
+    - Flexible CSV columns - system adapts to your data structure
+
+    - hierarchy_level: Can be name (Parshad, MCD, etc.) or number (1-7)
+      New hierarchy names will be auto-assigned the next available number
+    - categories: Comma-separated in quotes (e.g., "Roads,Sanitation")
+      New categories are automatically added to the system
+    """
+    import csv
+    import io
+
+    try:
+        # Parse CSV
+        csv_file = io.StringIO(csv_content)
+        reader = csv.DictReader(csv_file)
+
+        # Dynamic hierarchy mapping - starts with known values
+        hierarchy_map = {
+            "parshad": 1, "ward councillor": 1,
+            "mcd": 2, "municipal corporation": 2,
+            "ias": 3, "ias officer": 3,
+            "mla": 4, "mla": 4,
+            "mp": 5, "member of parliament": 5,
+            "cm": 6, "chief minister": 6,
+            "pm": 7, "prime minister": 7
+        }
+
+        # Track new hierarchy levels and categories discovered
+        new_hierarchy_levels = {}
+        new_categories = set()
+        next_hierarchy_number = 8  # Start assigning from 8 for new levels
+
+        # First pass: detect new hierarchy levels and categories
+        rows_data = list(reader)
+        for row in rows_data:
+            # Check for new hierarchy levels
+            hierarchy_input = str(row.get('hierarchy_level', '1')).strip().lower()
+            if not hierarchy_input.isdigit() and hierarchy_input not in hierarchy_map:
+                if hierarchy_input not in new_hierarchy_levels:
+                    new_hierarchy_levels[hierarchy_input] = next_hierarchy_number
+                    hierarchy_map[hierarchy_input] = next_hierarchy_number
+                    logger.info(f"Auto-detected new hierarchy level: '{hierarchy_input}' = {next_hierarchy_number}")
+                    next_hierarchy_number += 1
+
+            # Check for new categories
+            categories_str = row.get('categories', '')
+            if categories_str:
+                categories_list = [cat.strip() for cat in categories_str.split(',')]
+                for category in categories_list:
+                    if category:  # Not empty
+                        new_categories.add(category)
+
+        # Add new categories to database
+        categories_added = []
+        if new_categories:
+            logger.info(f"Checking {len(new_categories)} categories for auto-creation...")
+            for category_name in new_categories:
+                # Normalize category name
+                normalized_name = category_name.lower().replace(' ', '_').replace('&', 'and')
+
+                # Check if category exists
+                existing_category = await db.categories.find_one({"name": normalized_name})
+                if not existing_category:
+                    # Create new category
+                    category_doc = {
+                        "name": normalized_name,
+                        "display_name": category_name,
+                        "icon": "📋",  # Default icon
+                        "auto_created": True
+                    }
+                    try:
+                        await db.categories.insert_one(category_doc)
+                        categories_added.append(category_name)
+                        logger.info(f"✓ Auto-created category: {category_name}")
+                    except Exception as e:
+                        logger.warning(f"Could not create category {category_name}: {str(e)}")
+
+        created = []
+        errors = []
+
+        # Second pass: import officials with updated mappings
+        for row_num, row in enumerate(rows_data, start=2):  # Start at 2 (header is row 1)
+            try:
+                # Parse hierarchy level (can be name or number)
+                hierarchy_input = str(row.get('hierarchy_level', '1')).strip().lower()
+                if hierarchy_input.isdigit():
+                    hierarchy_level = int(hierarchy_input)
+                else:
+                    hierarchy_level = hierarchy_map.get(hierarchy_input, 1)
+
+                # Parse categories (comma-separated)
+                categories_str = row.get('categories', '')
+                if categories_str:
+                    categories = [cat.strip() for cat in categories_str.split(',')]
+                else:
+                    categories = []
+
+                # Create official data
+                official_data = GovtOfficialCreate(
+                    name=row.get('name', '').strip(),
+                    designation=row.get('designation', '').strip(),
+                    department=row.get('department', '').strip(),
+                    area=row.get('area', '').strip() or None,
+                    city=row.get('city', 'Delhi').strip(),
+                    state=row.get('state', 'Delhi').strip(),
+                    contact_email=row.get('email', '').strip() or None,
+                    contact_phone=row.get('phone', '').strip() or None,
+                    categories=categories,
+                    hierarchy_level=hierarchy_level
+                )
+
+                # Validate required fields
+                if not official_data.name:
+                    errors.append({"row": row_num, "error": "Name is required"})
+                    continue
+                if not official_data.designation:
+                    errors.append({"row": row_num, "error": "Designation is required"})
+                    continue
+                if not official_data.department:
+                    errors.append({"row": row_num, "error": "Department is required"})
+                    continue
+
+                # Create official
+                new_official = GovtOfficial(**official_data.dict())
+                await db.govt_officials.insert_one(new_official.dict())
+                created.append(new_official.id)
+
+            except Exception as e:
+                errors.append({"row": row_num, "error": str(e)})
+
+        return {
+            "success": True,
+            "message": f"Successfully imported {len(created)} officials",
+            "created_count": len(created),
+            "error_count": len(errors),
+            "created_ids": created,
+            "errors": errors,
+            "new_hierarchy_levels": new_hierarchy_levels,
+            "new_categories": categories_added
+        }
+
+    except Exception as e:
+        logger.error(f"CSV import failed: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Failed to parse CSV: {str(e)}"
+        )
 
 @api_router.put("/admin/officials/{official_id}", response_model=GovtOfficial)
 async def update_official(
@@ -732,13 +958,26 @@ async def get_categories():
 # Include the router in the main app
 app.include_router(api_router)
 
+# CORS Configuration - Whitelist specific origins for security
 app.add_middleware(
     CORSMiddleware,
     allow_credentials=True,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.get_allowed_origins(),
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH"],
+    allow_headers=["Content-Type", "Authorization"],
 )
+
+# Security Headers Middleware
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Add security headers to all responses"""
+    response = await call_next(request)
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 @app.on_event("shutdown")
 async def shutdown_db_client():

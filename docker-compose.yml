@@ -1,0 +1,80 @@
+version: '3.8'
+
+services:
+  # MongoDB Database
+  mongodb:
+    image: mongo:7.0
+    container_name: civicsense-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    environment:
+      MONGO_INITDB_DATABASE: civicsense
+    networks:
+      - civicsense-network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/civicsense --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend API
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: civicsense-backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGO_URL=mongodb://mongodb:27017
+      - DB_NAME=civicsense
+      - ALLOWED_ORIGINS=http://localhost:8081,http://localhost:19006,http://localhost:3000
+      - ENVIRONMENT=production
+      - FIREBASE_PROJECT_ID=civicsense-451d1
+    env_file:
+      - ./backend/.env
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - civicsense-network
+    volumes:
+      - ./backend:/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Frontend (for web version)
+  # Uncomment if deploying web version
+  # frontend:
+  #   build:
+  #     context: ./frontend
+  #     dockerfile: Dockerfile
+  #   container_name: civicsense-frontend
+  #   restart: unless-stopped
+  #   ports:
+  #     - "8081:8081"
+  #   environment:
+  #     - EXPO_PUBLIC_BACKEND_URL=http://localhost:8000
+  #   depends_on:
+  #     - backend
+  #   networks:
+  #     - civicsense-network
+
+networks:
+  civicsense-network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    driver: local
+  mongodb_config:
+    driver: local

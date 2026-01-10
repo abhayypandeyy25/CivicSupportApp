@@ -1,0 +1,11 @@
+name,email,phone,designation,department,hierarchy_level,area,categories
+Rajesh Kumar,rajesh@delhi.gov.in,+919876543210,District Collector,Revenue Department,District Collector,South Delhi,"Tax Collection,Land Records"
+Priya Sharma,priya@delhi.gov.in,+919876543211,Block Development Officer,Rural Development,Block Officer,Block 12,"Agriculture,Rural Infrastructure"
+Amit Verma,amit@delhi.gov.in,+919876543212,Tehsildar,Land Records,Tehsildar,Tehsil 5,"Property Records,Survey"
+Sunita Yadav,sunita@delhi.gov.in,+919876543213,Gram Panchayat President,Panchayat Raj,Gram Panchayat,Village Cluster 3,"Community Development,Local Governance"
+Vikram Singh,vikram@delhi.gov.in,+919876543214,Deputy Commissioner,Administration,Deputy Commissioner,District HQ,"Administration,Coordination"
+Dr. Anjali Mehra,anjali@delhi.gov.in,+919876543215,Chief Medical Officer,Health Services,CMO,District Hospital,"Public Health,Disease Control,Medical Services"
+Ramesh Gupta,ramesh@delhi.gov.in,+919876543216,Senior Superintendent,Police,SSP,City Zone,"Law Enforcement,Public Safety,Cybercrime"
+Kavita Reddy,kavita@delhi.gov.in,+919876543217,Regional Transport Officer,Transport,RTO,Regional Office,"Vehicle Registration,Licensing,Traffic Management"
+Suresh Chand,suresh@delhi.gov.in,+919876543218,Assistant Engineer,Irrigation,AE Irrigation,Canal Division,"Water Management,Canal Maintenance"
+Meena Joshi,meena@delhi.gov.in,+919876543219,Forest Range Officer,Forest Department,Range Officer,Forest Range 7,"Wildlife Protection,Forest Conservation,Eco Tourism"

@@ -188,9 +188,10 @@ export default function LoginScreen() {
     }
   };
 
-  const handleDemoLogin = () => {
-    router.replace('/(tabs)');
-  };
+  // REMOVED: Demo login bypass - security vulnerability
+  // const handleDemoLogin = () => {
+  //   router.replace('/(tabs)');
+  // };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -309,11 +310,12 @@ export default function LoginScreen() {
               <Text style={styles.googleButtonText}>Continue with Google</Text>
             </TouchableOpacity>
 
-            {/* Demo Login */}
+            {/* REMOVED: Demo Login - Security vulnerability that allows bypassing authentication
             <TouchableOpacity style={styles.demoButton} onPress={handleDemoLogin}>
               <Ionicons name="play-circle-outline" size={20} color="#FF5722" />
               <Text style={styles.demoButtonText}>Continue as Demo User</Text>
             </TouchableOpacity>
+            */}
           </View>
 
           {/* Invisible reCAPTCHA container */}
