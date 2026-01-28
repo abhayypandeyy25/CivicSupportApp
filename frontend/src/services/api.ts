@@ -39,6 +39,27 @@ export interface User {
   is_admin: boolean;
 }
 
+export interface Comment {
+  id: string;
+  user_id: string;
+  user_name: string;
+  text: string;
+  is_official: boolean;
+  official_designation?: string;
+  created_at: string;
+}
+
+export interface TimelineEvent {
+  id: string;
+  event_type: 'created' | 'status_change' | 'assigned' | 'comment_added' | 'upvote_milestone';
+  old_value?: string;
+  new_value?: string;
+  description: string;
+  user_id?: string;
+  user_name?: string;
+  created_at: string;
+}
+
 export interface Issue {
   id: string;
   user_id: string;
@@ -56,6 +77,10 @@ export interface Issue {
   assigned_official_name?: string;
   upvotes: number;
   upvoted_by: string[];
+  comments: Comment[];
+  timeline: TimelineEvent[];
+  priority_score: number;
+  view_count: number;
   created_at: string;
   updated_at: string;
 }
@@ -93,6 +118,74 @@ export interface AIClassificationResponse {
   confidence: number;
 }
 
+export interface IssueStats {
+  total_issues: number;
+  pending: number;
+  in_progress: number;
+  resolved: number;
+  categories: { category: string; count: number }[];
+  recent_week: number;
+  top_issues: {
+    id: string;
+    title: string;
+    upvotes: number;
+    category: string;
+    status: string;
+  }[];
+}
+
+export type SortOption = 'newest' | 'oldest' | 'upvotes' | 'priority' | 'nearest';
+
+export interface OfficialReportCard {
+  official: {
+    id: string;
+    name: string;
+    designation: string;
+    department: string;
+    area?: string;
+    contact_email?: string;
+    contact_phone?: string;
+    categories: string[];
+    hierarchy_level: number;
+  };
+  stats: {
+    total_assigned: number;
+    resolved: number;
+    in_progress: number;
+    pending: number;
+    resolution_rate: number;
+    avg_resolution_days: number;
+  };
+  performance: {
+    score: number;
+    grade: string;
+    grade_label: string;
+  };
+  categories_breakdown: {
+    category: string;
+    total: number;
+    resolved: number;
+    pending: number;
+    in_progress: number;
+    resolution_rate: number;
+  }[];
+  recent_resolved: {
+    id: string;
+    title: string;
+    category: string;
+    resolved_at: string;
+    upvotes: number;
+  }[];
+}
+
+export interface OfficialWithStats extends GovtOfficial {
+  stats: {
+    total_assigned: number;
+    resolved: number;
+    resolution_rate: number;
+  };
+}
+
 // API Functions
 export const apiService = {
   // Health check
@@ -120,6 +213,8 @@ export const apiService = {
     radius_km?: number;
     category?: string;
     status?: string;
+    search?: string;
+    sort_by?: SortOption;
     skip?: number;
     limit?: number;
   }) => api.get<Issue[]>('/issues', { params }),
@@ -134,6 +229,21 @@ export const apiService = {
   getMyIssues: (params?: { skip?: number; limit?: number }) =>
     api.get<Issue[]>('/issues/user/me', { params }),
 
+  // Issue Stats
+  getIssueStats: () => api.get<IssueStats>('/issues/stats/summary'),
+
+  // Comments
+  getComments: (issueId: string) => api.get<Comment[]>(`/issues/${issueId}/comments`),
+
+  addComment: (issueId: string, text: string) =>
+    api.post<Comment>(`/issues/${issueId}/comments`, { text }),
+
+  deleteComment: (issueId: string, commentId: string) =>
+    api.delete(`/issues/${issueId}/comments/${commentId}`),
+
+  // Timeline
+  getTimeline: (issueId: string) => api.get<TimelineEvent[]>(`/issues/${issueId}/timeline`),
+
   // AI Classification
   classifyIssue: (data: { title: string; description: string; location?: Location }) =>
     api.post<AIClassificationResponse>('/classify', data),
@@ -146,11 +256,14 @@ export const apiService = {
     category?: string;
     skip?: number;
     limit?: number;
-  }) => api.get<GovtOfficial[]>('/officials', { params }),
+  }) => api.get<OfficialWithStats[]>('/officials', { params }),
 
   getOfficialsByHierarchy: () => api.get('/officials/hierarchy'),
 
   getOfficial: (officialId: string) => api.get<GovtOfficial>(`/officials/${officialId}`),
+
+  getOfficialReportCard: (officialId: string) =>
+    api.get<OfficialReportCard>(`/officials/${officialId}/report-card`),
 
   // Categories
   getCategories: () => api.get<{ categories: Category[] }>('/categories'),
