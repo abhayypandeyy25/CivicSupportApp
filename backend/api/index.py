@@ -4,8 +4,17 @@ os.environ["VERCEL"] = "1"
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import Optional
 from supabase import create_client
 from datetime import datetime, timedelta
+
+# Request models
+class UpdateStatusRequest(BaseModel):
+    status: str
+
+class AssignOfficialRequest(BaseModel):
+    official_id: str
 
 # Initialize app
 app = FastAPI(title="CivicSense API")
@@ -188,3 +197,136 @@ def get_issues(
         issues.append(issue)
 
     return issues
+
+@app.get("/api/issues/{issue_id}")
+def get_issue(issue_id: str):
+    """Get a single issue by ID"""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    result = supabase.table('issues').select('*').eq('id', issue_id).execute()
+
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Issue not found")
+
+    row = result.data[0]
+    issue = {
+        "id": str(row['id']),
+        "user_id": str(row.get('user_id', '')),
+        "user_name": row.get('user_name'),
+        "title": row['title'],
+        "description": row['description'],
+        "category": row['category'],
+        "photos": row.get('photos', []),
+        "location": {
+            "latitude": row.get('location_latitude', 0),
+            "longitude": row.get('location_longitude', 0),
+            "address": row.get('location_address'),
+            "area": row.get('location_area'),
+            "city": row.get('location_city', 'Delhi')
+        },
+        "status": row.get('status', 'pending'),
+        "upvotes": row.get('upvotes', 0),
+        "created_at": row.get('created_at'),
+        "source": row.get('source', 'app'),
+        "location_status": row.get('location_status', 'resolved'),
+        "assigned_official_id": row.get('assigned_official_id'),
+    }
+
+    # Add Twitter data if present
+    if row.get('twitter_tweet_id'):
+        issue["twitter_data"] = {
+            "tweet_id": row['twitter_tweet_id'],
+            "twitter_username": row.get('twitter_username', ''),
+            "twitter_display_name": row.get('twitter_display_name'),
+            "twitter_profile_image": row.get('twitter_profile_image'),
+            "tweet_text": row.get('twitter_tweet_text', ''),
+            "like_count": row.get('twitter_like_count', 0),
+            "retweet_count": row.get('twitter_retweet_count', 0),
+            "reply_count": row.get('twitter_reply_count', 0)
+        }
+
+    return issue
+
+@app.patch("/api/issues/{issue_id}/status")
+def update_issue_status(issue_id: str, request: UpdateStatusRequest):
+    """Update the status of an issue"""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    valid_statuses = ['pending', 'in_progress', 'resolved', 'rejected']
+    if request.status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
+
+    # Check if issue exists
+    existing = supabase.table('issues').select('id').eq('id', issue_id).execute()
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Issue not found")
+
+    # Update status
+    update_data = {
+        'status': request.status,
+        'updated_at': datetime.utcnow().isoformat()
+    }
+
+    # If resolved, set resolved_at
+    if request.status == 'resolved':
+        update_data['resolved_at'] = datetime.utcnow().isoformat()
+
+    result = supabase.table('issues').update(update_data).eq('id', issue_id).execute()
+
+    return {"success": True, "status": request.status, "issue_id": issue_id}
+
+@app.patch("/api/issues/{issue_id}/assign")
+def assign_official(issue_id: str, request: AssignOfficialRequest):
+    """Assign an official to an issue"""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    # Check if issue exists
+    existing = supabase.table('issues').select('id').eq('id', issue_id).execute()
+    if not existing.data:
+        raise HTTPException(status_code=404, detail="Issue not found")
+
+    # Check if official exists
+    official = supabase.table('govt_officials').select('id, name').eq('id', request.official_id).execute()
+    if not official.data:
+        raise HTTPException(status_code=404, detail="Official not found")
+
+    # Update issue with assigned official
+    update_data = {
+        'assigned_official_id': request.official_id,
+        'status': 'in_progress',  # Auto-set to in_progress when assigned
+        'updated_at': datetime.utcnow().isoformat()
+    }
+
+    result = supabase.table('issues').update(update_data).eq('id', issue_id).execute()
+
+    return {
+        "success": True,
+        "issue_id": issue_id,
+        "assigned_official_id": request.official_id,
+        "official_name": official.data[0]['name']
+    }
+
+@app.get("/api/officials")
+def get_officials():
+    """Get list of active government officials"""
+    if not supabase:
+        raise HTTPException(status_code=500, detail="Database not configured")
+
+    result = supabase.table('govt_officials').select('*').eq('is_active', True).execute()
+
+    officials = []
+    for row in result.data:
+        officials.append({
+            "id": str(row['id']),
+            "name": row.get('name', ''),
+            "designation": row.get('designation', ''),
+            "department": row.get('department', ''),
+            "area": row.get('area', ''),
+            "email": row.get('email', ''),
+            "phone": row.get('phone', ''),
+        })
+
+    return officials

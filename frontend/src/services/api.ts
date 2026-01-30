@@ -360,7 +360,27 @@ export const apiService = {
   }) => api.get<Issue[]>('/admin/twitter/issues', { params }),
   updateIssueLocation: (issueId: string, location: Location) =>
     api.put<Issue>(`/admin/issues/${issueId}/location`, location),
+
+  // Issue management (for governance dashboard)
+  updateIssueStatus: (issueId: string, status: string) =>
+    api.patch<{ success: boolean; status: string; issue_id: string }>(`/issues/${issueId}/status`, { status }),
+
+  assignOfficialToIssue: (issueId: string, officialId: string) =>
+    api.patch<{ success: boolean; issue_id: string; assigned_official_id: string; official_name: string }>(`/issues/${issueId}/assign`, { official_id: officialId }),
+
+  getOfficialsList: () => api.get<Official[]>('/officials'),
 };
+
+// Simple Official type for dropdown
+export interface Official {
+  id: string;
+  name: string;
+  designation: string;
+  department: string;
+  area?: string;
+  email?: string;
+  phone?: string;
+}
 
 // Twitter Stats Types
 export interface TwitterSyncStats {
