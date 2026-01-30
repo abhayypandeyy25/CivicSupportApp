@@ -1227,6 +1227,11 @@ async def startup_event():
     """Initialize services on startup"""
     logger.info("CivicSense API starting up with Supabase backend")
 
+    # Skip background tasks on Vercel (serverless)
+    if os.environ.get("VERCEL"):
+        logger.info("Running on Vercel - skipping background scheduler")
+        return
+
     # Initialize Twitter integration if configured
     if settings.TWITTER_ENABLED and settings.TWITTER_BEARER_TOKEN:
         try:
