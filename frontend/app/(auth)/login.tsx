@@ -16,7 +16,7 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/context/AuthContext';
 import { ConfirmationResult, RecaptchaVerifier, signInWithPhoneNumber } from 'firebase/auth';
-import { auth } from '../../src/config/firebase';
+import { auth, isDemoMode } from '../../src/config/firebase';
 
 export default function LoginScreen() {
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -27,11 +27,11 @@ export default function LoginScreen() {
   const [recaptchaVerifier, setRecaptchaVerifier] = useState<RecaptchaVerifier | null>(null);
   const [statusMessage, setStatusMessage] = useState('');
   const router = useRouter();
-  const { verifyOTP, signInWithGoogle, user } = useAuth();
+  const { verifyOTP, signInWithGoogle, signInDemo, user, isDemoMode: contextDemoMode } = useAuth();
 
-  // Initialize invisible reCAPTCHA on web
+  // Initialize invisible reCAPTCHA on web (skip in demo mode)
   useEffect(() => {
-    if (Platform.OS === 'web') {
+    if (Platform.OS === 'web' && !isDemoMode) {
       setupInvisibleRecaptcha();
     }
   }, []);
@@ -101,11 +101,11 @@ export default function LoginScreen() {
 
     setLoading(true);
     setStatusMessage('Sending OTP...');
-    
+
     try {
       const formattedNumber = phoneNumber.startsWith('+91') ? phoneNumber : `+91${phoneNumber}`;
       console.log('Sending OTP to:', formattedNumber);
-      
+
       const result = await signInWithPhoneNumber(auth, formattedNumber, recaptchaVerifier);
       console.log('OTP sent successfully!');
       setConfirmationResult(result);
@@ -115,7 +115,7 @@ export default function LoginScreen() {
     } catch (error: any) {
       console.error('OTP Error:', error.code, error.message);
       let errorMessage = 'Failed to send OTP.';
-      
+
       if (error.code === 'auth/invalid-phone-number') {
         errorMessage = 'Invalid phone number. Please enter a valid Indian mobile number.';
       } else if (error.code === 'auth/too-many-requests') {
@@ -130,7 +130,7 @@ export default function LoginScreen() {
       } else {
         errorMessage = error.message || 'Unknown error occurred';
       }
-      
+
       setStatusMessage(errorMessage);
       Alert.alert('Error', errorMessage);
     } finally {
@@ -187,11 +187,6 @@ export default function LoginScreen() {
       setLoading(false);
     }
   };
-
-  // REMOVED: Demo login bypass - security vulnerability
-  // const handleDemoLogin = () => {
-  //   router.replace('/(tabs)');
-  // };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -310,12 +305,41 @@ export default function LoginScreen() {
               <Text style={styles.googleButtonText}>Continue with Google</Text>
             </TouchableOpacity>
 
-            {/* REMOVED: Demo Login - Security vulnerability that allows bypassing authentication
-            <TouchableOpacity style={styles.demoButton} onPress={handleDemoLogin}>
-              <Ionicons name="play-circle-outline" size={20} color="#FF5722" />
-              <Text style={styles.demoButtonText}>Continue as Demo User</Text>
-            </TouchableOpacity>
-            */}
+            {/* Demo Login - Only shown in demo mode for local testing */}
+            {isDemoMode && (
+              <TouchableOpacity
+                style={[styles.demoButton, loading && styles.buttonDisabled]}
+                onPress={async () => {
+                  setLoading(true);
+                  setStatusMessage('Signing in as demo user...');
+                  try {
+                    const success = await signInDemo();
+                    if (success) {
+                      router.replace('/(tabs)');
+                    }
+                  } catch (error) {
+                    Alert.alert('Error', 'Failed to sign in as demo user');
+                  } finally {
+                    setLoading(false);
+                    setStatusMessage('');
+                  }
+                }}
+                disabled={loading}
+              >
+                <Ionicons name="play-circle-outline" size={20} color="#FF5722" />
+                <Text style={styles.demoButtonText}>Continue as Demo User</Text>
+              </TouchableOpacity>
+            )}
+
+            {/* Demo mode banner */}
+            {isDemoMode && (
+              <View style={styles.demoBanner}>
+                <Ionicons name="information-circle" size={16} color="#FF9800" />
+                <Text style={styles.demoBannerText}>
+                  Running in demo mode - Firebase not configured
+                </Text>
+              </View>
+            )}
           </View>
 
           {/* Invisible reCAPTCHA container */}
@@ -357,8 +381,10 @@ const styles = StyleSheet.create({
   dividerText: { color: '#999', paddingHorizontal: 16, fontSize: 14 },
   googleButton: { backgroundColor: '#4285F4', paddingVertical: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 12 },
   googleButtonText: { color: '#fff', fontSize: 16, fontWeight: '600', marginLeft: 10 },
-  demoButton: { backgroundColor: '#FFF3E0', paddingVertical: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#FF5722' },
+  demoButton: { backgroundColor: '#FFF3E0', paddingVertical: 16, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', borderWidth: 1, borderColor: '#FF5722', marginBottom: 12 },
   demoButtonText: { color: '#FF5722', fontSize: 16, fontWeight: '600', marginLeft: 10 },
+  demoBanner: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF8E1', padding: 12, borderRadius: 8, marginTop: 8 },
+  demoBannerText: { fontSize: 12, color: '#FF9800', marginLeft: 6, textAlign: 'center' },
   recaptchaContainer: { position: 'absolute', bottom: 0, left: 0, opacity: 0 },
   footer: { marginTop: 24, alignItems: 'center' },
   footerText: { fontSize: 12, color: '#999', textAlign: 'center' },

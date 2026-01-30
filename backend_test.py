@@ -9,8 +9,8 @@ import json
 import sys
 from datetime import datetime
 
-# Backend URL from environment
-BACKEND_URL = "https://civicwatch-21.preview.emergentagent.com/api"
+# Backend URL - default to localhost for local testing
+BACKEND_URL = "http://localhost:8000/api"
 
 class BackendTester:
     def __init__(self):

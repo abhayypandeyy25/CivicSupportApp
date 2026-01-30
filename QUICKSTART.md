@@ -42,7 +42,7 @@ JWT_SECRET=generate-a-random-secret-here
 
 # OPTIONAL but recommended
 SENTRY_DSN=your-sentry-dsn
-EMERGENT_LLM_KEY=your-llm-api-key
+ANTHROPIC_API_KEY=your-anthropic-api-key
 ```
 
 ### Quick MongoDB Setup Options:

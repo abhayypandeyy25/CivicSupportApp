@@ -18,7 +18,7 @@ print("=" * 60)
 print("\n1. Environment Variables:")
 mongo_url = os.getenv('MONGO_URL')
 db_name = os.getenv('DB_NAME')
-llm_key = os.getenv('EMERGENT_LLM_KEY')
+anthropic_key = os.getenv('ANTHROPIC_API_KEY')
 
 if mongo_url:
     print(f"   ✅ MONGO_URL: {mongo_url}")
@@ -30,10 +30,10 @@ if db_name:
 else:
     print("   ❌ DB_NAME: NOT SET")
 
-if llm_key:
-    print(f"   ✅ EMERGENT_LLM_KEY: ***{llm_key[-8:]} (configured)")
+if anthropic_key:
+    print(f"   ✅ ANTHROPIC_API_KEY: ***{anthropic_key[-8:]} (configured)")
 else:
-    print("   ⚠️  EMERGENT_LLM_KEY: NOT SET (AI will use fallback)")
+    print("   ⚠️  ANTHROPIC_API_KEY: NOT SET (AI will use fallback)")
 
 # Check 2: Dependencies
 print("\n2. Python Dependencies:")
@@ -41,7 +41,7 @@ dependencies = [
     ("FastAPI", "fastapi"),
     ("Motor (MongoDB)", "motor"),
     ("Firebase Admin", "firebase_admin"),
-    ("EmergentIntegrations (AI)", "emergentintegrations"),
+    ("Anthropic (AI)", "anthropic"),
     ("Pydantic", "pydantic"),
     ("SlowAPI (Rate Limiting)", "slowapi")
 ]
@@ -97,10 +97,10 @@ except ImportError:
 # Check 4: AI Feature
 print("\n4. AI Classification Feature:")
 try:
-    from emergentintegrations.llm.chat import LlmChat
-    print(f"   ✅ AI Library: Installed")
+    import anthropic
+    print(f"   ✅ AI Library (Anthropic): Installed")
 
-    if llm_key:
+    if anthropic_key:
         print(f"   ✅ API Key: Configured")
         print(f"   ✅ AI Classification: READY")
     else:
@@ -109,7 +109,7 @@ try:
 
 except ImportError:
     print(f"   ❌ AI Library: Not installed")
-    print(f"   ℹ️  Install: pip install emergentintegrations")
+    print(f"   ℹ️  Install: pip install anthropic")
 
 # Check 5: Location Feature
 print("\n5. Location-based (Geospatial) Feature:")
@@ -135,8 +135,8 @@ if not missing and mongo_url and db_name:
     print("✅ All core dependencies installed")
     print("✅ Database configured")
 
-    if llm_key:
-        print("✅ AI feature ready (with API key)")
+    if anthropic_key:
+        print("✅ AI feature ready (with Anthropic API key)")
     else:
         print("⚠️  AI feature in fallback mode (no API key)")
 

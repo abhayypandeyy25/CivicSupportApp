@@ -69,7 +69,7 @@ if [ ! -f ".env" ]; then
     echo -e "${YELLOW}⚠️  IMPORTANT: Edit .env file and set:${NC}"
     echo "   - MONGO_URL=mongodb://localhost:27017"
     echo "   - DB_NAME=civicsense"
-    echo "   - EMERGENT_LLM_KEY=your_api_key (optional for AI)"
+    echo "   - ANTHROPIC_API_KEY=your_api_key (optional for AI)"
     echo ""
     echo "Generate JWT secret:"
     echo "   python3 -c \"import secrets; print(secrets.token_urlsafe(32))\""

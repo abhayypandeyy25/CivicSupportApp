@@ -85,7 +85,7 @@ See [IMPROVEMENTS_SUMMARY.md](IMPROVEMENTS_SUMMARY.md) for all improvements.
 - **Framework**: FastAPI (Python)
 - **Database**: MongoDB with geospatial indexes
 - **Authentication**: Firebase Admin SDK
-- **AI**: emergentintegrations LLM for classification
+- **AI**: Anthropic Claude for classification
 - **Monitoring**: Sentry for error tracking
 - **Security**: Rate limiting, CORS, input validation
 

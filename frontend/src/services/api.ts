@@ -60,6 +60,25 @@ export interface TimelineEvent {
   created_at: string;
 }
 
+// Twitter-specific data for issues reported via Twitter
+export interface TwitterData {
+  tweet_id: string;
+  twitter_user_id: string;
+  twitter_username: string;
+  twitter_display_name?: string;
+  twitter_profile_image?: string;
+  tweet_text: string;
+  tweet_url: string;
+  tweet_created_at: string;
+  has_media: boolean;
+  media_urls: string[];
+  hashtags: string[];
+  retweet_count: number;
+  like_count: number;
+  reply_count: number;
+  fetched_at: string;
+}
+
 export interface Issue {
   id: string;
   user_id: string;
@@ -83,6 +102,11 @@ export interface Issue {
   view_count: number;
   created_at: string;
   updated_at: string;
+  // Source tracking
+  source: 'app' | 'twitter';
+  location_status: 'resolved' | 'pending';
+  // Twitter-specific data (only present when source === 'twitter')
+  twitter_data?: TwitterData;
 }
 
 export interface GovtOfficial {
@@ -132,6 +156,57 @@ export interface IssueStats {
     category: string;
     status: string;
   }[];
+}
+
+// Enhanced dashboard stats
+export interface DashboardStats {
+  total_issues: number;
+  pending_issues: number;
+  in_progress_issues: number;
+  resolved_issues: number;
+  resolution_rate: number;
+  issues_this_week: number;
+  total_users: number;
+  total_officials: number;
+  categories: CategoryBreakdown[];
+  areas: AreaBreakdown[];
+  issues_by_source: {
+    app: number;
+    twitter: number;
+  };
+  pending_location_issues: number;
+  twitter_engagement: {
+    total_likes: number;
+    total_retweets: number;
+    total_replies: number;
+  };
+  top_officials: OfficialPerformance[];
+}
+
+export interface CategoryBreakdown {
+  category: string;
+  total: number;
+  pending: number;
+  in_progress: number;
+  resolved: number;
+}
+
+export interface AreaBreakdown {
+  area: string;
+  total: number;
+  pending: number;
+  resolved: number;
+}
+
+export interface OfficialPerformance {
+  id: string;
+  name: string;
+  designation: string;
+  department: string;
+  total_assigned: number;
+  resolved: number;
+  resolution_rate: number;
+  grade: string;
 }
 
 export type SortOption = 'newest' | 'oldest' | 'upvotes' | 'priority' | 'nearest';
@@ -213,6 +288,8 @@ export const apiService = {
     radius_km?: number;
     category?: string;
     status?: string;
+    source?: 'app' | 'twitter';  // Filter by source
+    location_status?: 'resolved' | 'pending';  // Filter by location status
     search?: string;
     sort_by?: SortOption;
     skip?: number;
@@ -269,7 +346,48 @@ export const apiService = {
   getCategories: () => api.get<{ categories: Category[] }>('/categories'),
 
   // Stats
-  getStats: () => api.get('/stats'),
+  getStats: () => api.get<DashboardStats>('/stats'),
+  getDashboardStats: () => api.get<DashboardStats>('/stats'),
+
+  // Twitter (public endpoints for governance dashboard)
+  getTwitterStats: () => api.get<TwitterStats>('/twitter/stats'),
+  triggerTwitterSync: () => api.post<{ success: boolean; stats: TwitterSyncStats }>('/twitter/sync'),
+  getTwitterIssues: (params?: {
+    skip?: number;
+    limit?: number;
+    status?: string;
+    location_status?: 'resolved' | 'pending';
+  }) => api.get<Issue[]>('/admin/twitter/issues', { params }),
+  updateIssueLocation: (issueId: string, location: Location) =>
+    api.put<Issue>(`/admin/issues/${issueId}/location`, location),
 };
+
+// Twitter Stats Types
+export interface TwitterSyncStats {
+  tweets_fetched: number;
+  issues_created: number;
+  duplicates_skipped: number;
+  errors: number;
+  pending_location: number;
+}
+
+export interface TwitterStats {
+  enabled: boolean;
+  twitter_handle: string;
+  sync_state: {
+    last_mention_id?: string;
+    last_sync_at?: string;
+    total_tweets_processed: number;
+    total_issues_created: number;
+  };
+  total_twitter_issues: number;
+  pending_twitter_issues: number;
+  pending_location_issues: number;
+  top_reporters: {
+    username: string;
+    display_name?: string;
+    count: number;
+  }[];
+}
 
 export default api;

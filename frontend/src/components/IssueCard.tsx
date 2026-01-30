@@ -7,6 +7,7 @@ import {
   Image,
   Share,
   Dimensions,
+  Linking,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Issue } from '../services/api';
@@ -56,6 +57,15 @@ export default function IssueCard({ issue, onUpvote, onPress, currentUserId }: I
     }
   };
 
+  const handleTwitterPress = () => {
+    if (issue.twitter_data?.tweet_url) {
+      Linking.openURL(issue.twitter_data.tweet_url);
+    }
+  };
+
+  const isTwitterIssue = issue.source === 'twitter';
+  const needsLocation = issue.location_status === 'pending';
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();
@@ -78,18 +88,43 @@ export default function IssueCard({ issue, onUpvote, onPress, currentUserId }: I
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.userInfo}>
-          <View style={styles.avatar}>
-            <Text style={styles.avatarText}>
-              {issue.user_name?.charAt(0)?.toUpperCase() || 'U'}
-            </Text>
-          </View>
-          <View>
-            <Text style={styles.userName}>{issue.user_name || 'Anonymous'}</Text>
+          {isTwitterIssue && issue.twitter_data?.twitter_profile_image ? (
+            <Image
+              source={{ uri: issue.twitter_data.twitter_profile_image }}
+              style={styles.avatarImage}
+            />
+          ) : (
+            <View style={[styles.avatar, isTwitterIssue && styles.avatarTwitter]}>
+              <Text style={styles.avatarText}>
+                {issue.user_name?.charAt(0)?.toUpperCase() || 'U'}
+              </Text>
+            </View>
+          )}
+          <View style={styles.userNameContainer}>
+            <View style={styles.userNameRow}>
+              <Text style={styles.userName}>{issue.user_name || 'Anonymous'}</Text>
+              {isTwitterIssue && (
+                <TouchableOpacity style={styles.twitterBadge} onPress={handleTwitterPress}>
+                  <Ionicons name="logo-twitter" size={12} color="#1DA1F2" />
+                  <Text style={styles.twitterHandle}>
+                    @{issue.twitter_data?.twitter_username}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
             <Text style={styles.timeText}>{formatDate(issue.created_at)}</Text>
           </View>
         </View>
-        <View style={[styles.statusBadge, { backgroundColor: statusColors[issue.status] || '#9E9E9E' }]}>
-          <Text style={styles.statusText}>{issue.status.replace('_', ' ')}</Text>
+        <View style={styles.headerRight}>
+          {needsLocation && (
+            <View style={styles.locationNeededBadge}>
+              <Ionicons name="location-outline" size={12} color="#FF9800" />
+              <Text style={styles.locationNeededText}>Location needed</Text>
+            </View>
+          )}
+          <View style={[styles.statusBadge, { backgroundColor: statusColors[issue.status] || '#9E9E9E' }]}>
+            <Text style={styles.statusText}>{issue.status.replace('_', ' ')}</Text>
+          </View>
         </View>
       </View>
 
@@ -206,20 +241,71 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 10,
   },
+  avatarTwitter: {
+    backgroundColor: '#1DA1F2',
+  },
+  avatarImage: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 10,
+  },
   avatarText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  userNameContainer: {
+    flex: 1,
+  },
+  userNameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flexWrap: 'wrap',
   },
   userName: {
     fontSize: 14,
     fontWeight: '600',
     color: '#333',
   },
+  twitterBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#E8F5FE',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginLeft: 6,
+  },
+  twitterHandle: {
+    fontSize: 11,
+    color: '#1DA1F2',
+    marginLeft: 3,
+    fontWeight: '500',
+  },
   timeText: {
     fontSize: 12,
     color: '#999',
     marginTop: 2,
+  },
+  headerRight: {
+    alignItems: 'flex-end',
+    gap: 4,
+  },
+  locationNeededBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FFF3E0',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    marginBottom: 4,
+  },
+  locationNeededText: {
+    fontSize: 10,
+    color: '#FF9800',
+    marginLeft: 3,
+    fontWeight: '500',
   },
   statusBadge: {
     paddingHorizontal: 10,

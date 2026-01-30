@@ -68,8 +68,8 @@ DB_NAME=civicsense
 FIREBASE_PROJECT_ID=civicsense-451d1
 
 # For AI Classification (optional but recommended)
-# Get key from: https://emergentintegrations.com or your AI provider
-EMERGENT_LLM_KEY=your_api_key_here
+# Get key from: https://anthropic.com or your AI provider
+ANTHROPIC_API_KEY=your_api_key_here
 
 # For development (localhost is fine)
 ALLOWED_ORIGINS=http://localhost:8081,http://localhost:19006,http://localhost:3000
@@ -107,7 +107,7 @@ pip install -r requirements.txt
 
 **Expected output**:
 ```
-Successfully installed fastapi motor firebase-admin emergentintegrations ...
+Successfully installed fastapi motor firebase-admin anthropic ...
 ```
 
 ---
@@ -214,7 +214,7 @@ import os
 from dotenv import load_dotenv
 load_dotenv()
 
-api_key = os.getenv('EMERGENT_LLM_KEY')
+api_key = os.getenv('ANTHROPIC_API_KEY')
 
 if api_key:
     print("✅ AI API Key is configured")
@@ -225,7 +225,7 @@ else:
     print("   AI will use fallback mode (returns 'general' category)")
     print("   To enable AI:")
     print("   1. Get API key from your AI provider")
-    print("   2. Add to .env: EMERGENT_LLM_KEY=your_key")
+    print("   2. Add to .env: ANTHROPIC_API_KEY=your_key")
 EOF
 ```
 

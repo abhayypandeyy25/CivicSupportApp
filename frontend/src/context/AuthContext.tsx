@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { auth } from '../config/firebase';
+import { auth, isDemoMode } from '../config/firebase';
 import {
   User,
   onAuthStateChanged,
@@ -18,13 +18,27 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
+// Demo user for testing without Firebase
+const DEMO_USER = {
+  uid: 'demo-user-123',
+  email: 'demo@civicsense.local',
+  displayName: 'Demo User',
+  phoneNumber: '+1234567890',
+  photoURL: null,
+  emailVerified: true,
+  getIdToken: async () => 'demo-token-for-local-testing',
+  getIdTokenResult: async () => ({ token: 'demo-token-for-local-testing', claims: {} }),
+} as unknown as User;
+
 interface AuthContextType {
   user: User | null;
   loading: boolean;
   token: string | null;
+  isDemoMode: boolean;
   sendOTP: (phoneNumber: string, recaptchaVerifier: ApplicationVerifier) => Promise<ConfirmationResult | null>;
   verifyOTP: (confirmationResult: ConfirmationResult, code: string) => Promise<boolean>;
   signInWithGoogle: () => Promise<boolean>;
+  signInDemo: () => Promise<boolean>;
   signOut: () => Promise<void>;
   refreshToken: () => Promise<string | null>;
 }
@@ -36,7 +50,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState<string | null>(null);
 
+  // Demo mode sign-in for local testing
+  const signInDemo = async (): Promise<boolean> => {
+    try {
+      setUser(DEMO_USER);
+      setToken('demo-token-for-local-testing');
+      await AsyncStorage.setItem('demoLoggedIn', 'true');
+      await AsyncStorage.setItem('userToken', 'demo-token-for-local-testing');
+      console.log('Demo sign-in successful');
+      return true;
+    } catch (error) {
+      console.error('Error in demo sign-in:', error);
+      return false;
+    }
+  };
+
   useEffect(() => {
+    // In demo mode, check for stored demo session
+    if (isDemoMode) {
+      AsyncStorage.getItem('demoLoggedIn').then((value) => {
+        if (value === 'true') {
+          setUser(DEMO_USER);
+          setToken('demo-token-for-local-testing');
+        }
+        setLoading(false);
+      });
+      return;
+    }
+
+    // Normal Firebase auth flow
+    if (!auth) {
+      setLoading(false);
+      return;
+    }
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       setUser(user);
       if (user) {
@@ -65,7 +112,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const sendOTP = async (phoneNumber: string, recaptchaVerifier: ApplicationVerifier): Promise<ConfirmationResult | null> => {
+    // In demo mode, return a mock confirmation result
+    if (isDemoMode) {
+      console.log('Demo mode: Simulating OTP send to', phoneNumber);
+      return {
+        confirm: async (code: string) => {
+          if (code === '123456') {
+            await signInDemo();
+            return { user: DEMO_USER };
+          }
+          throw new Error('Invalid OTP');
+        },
+        verificationId: 'demo-verification-id',
+      } as unknown as ConfirmationResult;
+    }
+
     try {
+      if (!auth) throw new Error('Firebase not initialized');
       const confirmationResult = await signInWithPhoneNumber(auth, phoneNumber, recaptchaVerifier);
       return confirmationResult;
     } catch (error: any) {
@@ -85,12 +148,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signInWithGoogle = async (): Promise<boolean> => {
+    // In demo mode, use demo sign-in
+    if (isDemoMode) {
+      return signInDemo();
+    }
+
     try {
-      if (Platform.OS === 'web') {
+      if (Platform.OS === 'web' && auth) {
         const provider = new GoogleAuthProvider();
         provider.addScope('email');
         provider.addScope('profile');
-        
+
         try {
           // Try popup first
           const result = await signInWithPopup(auth, provider);
@@ -113,7 +181,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signOut = async () => {
     try {
-      await firebaseSignOut(auth);
+      if (isDemoMode) {
+        setUser(null);
+        setToken(null);
+        await AsyncStorage.removeItem('demoLoggedIn');
+        await AsyncStorage.removeItem('userToken');
+        return;
+      }
+
+      if (auth) {
+        await firebaseSignOut(auth);
+      }
       await AsyncStorage.removeItem('userToken');
     } catch (error) {
       console.error('Error signing out:', error);
@@ -121,6 +199,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const refreshToken = async (): Promise<string | null> => {
+    if (isDemoMode) {
+      return 'demo-token-for-local-testing';
+    }
+
     if (user) {
       const newToken = await user.getIdToken(true);
       setToken(newToken);
@@ -136,9 +218,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         user,
         loading,
         token,
+        isDemoMode,
         sendOTP,
         verifyOTP,
         signInWithGoogle,
+        signInDemo,
         signOut,
         refreshToken,
       }}

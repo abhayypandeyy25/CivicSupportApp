@@ -1,9 +1,21 @@
 import { initializeApp, getApps, getApp } from 'firebase/app';
-import { getAuth, initializeAuth, getReactNativePersistence } from 'firebase/auth';
+import { getAuth, initializeAuth, getReactNativePersistence, connectAuthEmulator } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
-const firebaseConfig = {
+// Check if running in demo mode (no Firebase credentials)
+const DEMO_MODE = !process.env.EXPO_PUBLIC_FIREBASE_API_KEY ||
+                  process.env.EXPO_PUBLIC_FIREBASE_API_KEY === 'demo';
+
+const firebaseConfig = DEMO_MODE ? {
+  // Demo/development config - uses Firebase emulator or mock
+  apiKey: 'demo-api-key-for-local-testing',
+  authDomain: 'localhost',
+  projectId: 'demo-civicsense',
+  storageBucket: 'demo-civicsense.appspot.com',
+  messagingSenderId: '000000000000',
+  appId: '1:000000000000:web:0000000000000000000000',
+} : {
   apiKey: process.env.EXPO_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN,
   projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
@@ -12,25 +24,31 @@ const firebaseConfig = {
   appId: process.env.EXPO_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase
-let app;
-if (getApps().length === 0) {
-  app = initializeApp(firebaseConfig);
-} else {
-  app = getApp();
-}
+// Export demo mode flag for other components to check
+export const isDemoMode = DEMO_MODE;
 
-// Initialize Auth with persistence
-let auth;
-if (Platform.OS === 'web') {
-  auth = getAuth(app);
-} else {
-  try {
-    auth = initializeAuth(app, {
-      persistence: getReactNativePersistence(AsyncStorage)
-    });
-  } catch (error) {
+// Initialize Firebase
+let app: any = null;
+let auth: any = null;
+
+if (!DEMO_MODE) {
+  if (getApps().length === 0) {
+    app = initializeApp(firebaseConfig);
+  } else {
+    app = getApp();
+  }
+
+  // Initialize Auth with persistence
+  if (Platform.OS === 'web') {
     auth = getAuth(app);
+  } else {
+    try {
+      auth = initializeAuth(app, {
+        persistence: getReactNativePersistence(AsyncStorage)
+      });
+    } catch (error) {
+      auth = getAuth(app);
+    }
   }
 }
 

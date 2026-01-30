@@ -8,7 +8,7 @@ export default function TabLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: '#FF5722',
+        tabBarActiveTintColor: '#1DA1F2',
         tabBarInactiveTintColor: '#999',
         tabBarStyle: {
           backgroundColor: '#fff',
@@ -27,37 +27,32 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: 'Dashboard',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="upload"
-        options={{
-          title: 'Report',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="add-circle" size={size + 8} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="officials"
-        options={{
-          title: 'Officials',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="people-outline" size={size} color={color} />
+            <Ionicons name="grid-outline" size={size} color={color} />
           ),
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'Profile',
+          title: 'Settings',
           tabBarIcon: ({ color, size }) => (
-            <Ionicons name="person-outline" size={size} color={color} />
+            <Ionicons name="settings-outline" size={size} color={color} />
           ),
+        }}
+      />
+      {/* Hidden tabs - end user features disabled */}
+      <Tabs.Screen
+        name="upload"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="officials"
+        options={{
+          href: null,
         }}
       />
     </Tabs>

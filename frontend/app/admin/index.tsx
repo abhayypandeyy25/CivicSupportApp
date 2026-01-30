@@ -14,7 +14,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { apiService, GovtOfficial } from '../../src/services/api';
+import { apiService, GovtOfficial, TwitterStats } from '../../src/services/api';
 import axios from 'axios';
 import * as DocumentPicker from 'expo-document-picker';
 
@@ -64,10 +64,14 @@ export default function AdminScreen() {
   });
   const [submitting, setSubmitting] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [twitterStats, setTwitterStats] = useState<TwitterStats | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [activeTab, setActiveTab] = useState<'officials' | 'twitter'>('officials');
   const router = useRouter();
 
   useEffect(() => {
     fetchOfficials();
+    fetchTwitterStats();
   }, []);
 
   const fetchOfficials = async () => {
@@ -78,6 +82,32 @@ export default function AdminScreen() {
       console.error('Error fetching officials:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTwitterStats = async () => {
+    try {
+      const response = await apiService.getTwitterStats();
+      setTwitterStats(response.data);
+    } catch (error) {
+      console.error('Error fetching Twitter stats:', error);
+    }
+  };
+
+  const handleTwitterSync = async () => {
+    setSyncing(true);
+    try {
+      const response = await apiService.triggerTwitterSync();
+      const stats = response.data.stats;
+      Alert.alert(
+        'Sync Complete',
+        `Fetched: ${stats.tweets_fetched}\nCreated: ${stats.issues_created}\nDuplicates: ${stats.duplicates_skipped}\nErrors: ${stats.errors}`
+      );
+      fetchTwitterStats();
+    } catch (error: any) {
+      Alert.alert('Sync Failed', error.response?.data?.detail || 'Failed to sync Twitter mentions');
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -402,23 +432,43 @@ roads, sanitation, water, electricity, encroachment, parks, public_safety, healt
         </View>
       </View>
 
-      {/* Stats */}
-      <View style={styles.statsRow}>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{officials.length}</Text>
-          <Text style={styles.statLabel}>Total Officials</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{officials.filter(o => o.hierarchy_level <= 2).length}</Text>
-          <Text style={styles.statLabel}>Local Level</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{officials.filter(o => o.hierarchy_level >= 4).length}</Text>
-          <Text style={styles.statLabel}>State/National</Text>
-        </View>
+      {/* Tab Switcher */}
+      <View style={styles.tabContainer}>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'officials' && styles.tabActive]}
+          onPress={() => setActiveTab('officials')}
+        >
+          <Ionicons name="people-outline" size={18} color={activeTab === 'officials' ? '#FF5722' : '#666'} />
+          <Text style={[styles.tabText, activeTab === 'officials' && styles.tabTextActive]}>Officials</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={[styles.tab, activeTab === 'twitter' && styles.tabActive]}
+          onPress={() => setActiveTab('twitter')}
+        >
+          <Ionicons name="logo-twitter" size={18} color={activeTab === 'twitter' ? '#1DA1F2' : '#666'} />
+          <Text style={[styles.tabText, activeTab === 'twitter' && styles.tabTextActive]}>Twitter</Text>
+        </TouchableOpacity>
       </View>
 
-      {/* Action Buttons */}
+      {activeTab === 'officials' ? (
+        <>
+          {/* Stats */}
+          <View style={styles.statsRow}>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{officials.length}</Text>
+              <Text style={styles.statLabel}>Total Officials</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{officials.filter(o => o.hierarchy_level <= 2).length}</Text>
+              <Text style={styles.statLabel}>Local Level</Text>
+            </View>
+            <View style={styles.statCard}>
+              <Text style={styles.statValue}>{officials.filter(o => o.hierarchy_level >= 4).length}</Text>
+              <Text style={styles.statLabel}>State/National</Text>
+            </View>
+          </View>
+
+          {/* Action Buttons */}
       {!showForm && (
         <View style={styles.actionButtonsContainer}>
           <TouchableOpacity style={styles.addButton} onPress={() => setShowForm(true)}>
@@ -453,22 +503,122 @@ roads, sanitation, water, electricity, encroachment, parks, public_safety, healt
         </View>
       )}
 
-      {/* Form or List */}
-      {showForm ? (
-        renderForm()
+          {/* Form or List */}
+          {showForm ? (
+            renderForm()
+          ) : (
+            <FlatList
+              data={officials}
+              keyExtractor={(item) => item.id}
+              renderItem={renderOfficialItem}
+              contentContainerStyle={styles.listContent}
+              ListEmptyComponent={
+                <View style={styles.emptyContainer}>
+                  <Ionicons name="people-outline" size={48} color="#ccc" />
+                  <Text style={styles.emptyText}>No officials added yet</Text>
+                </View>
+              }
+            />
+          )}
+        </>
       ) : (
-        <FlatList
-          data={officials}
-          keyExtractor={(item) => item.id}
-          renderItem={renderOfficialItem}
-          contentContainerStyle={styles.listContent}
-          ListEmptyComponent={
-            <View style={styles.emptyContainer}>
-              <Ionicons name="people-outline" size={48} color="#ccc" />
-              <Text style={styles.emptyText}>No officials added yet</Text>
+        /* Twitter Tab Content */
+        <ScrollView style={styles.twitterSection}>
+          {/* Twitter Stats */}
+          <View style={styles.twitterStatsContainer}>
+            <View style={styles.twitterHeader}>
+              <Ionicons name="logo-twitter" size={24} color="#1DA1F2" />
+              <Text style={styles.twitterTitle}>Twitter Integration</Text>
+              <View style={[styles.statusIndicator, twitterStats?.enabled ? styles.statusEnabled : styles.statusDisabled]}>
+                <Text style={styles.statusText}>{twitterStats?.enabled ? 'Active' : 'Disabled'}</Text>
+              </View>
             </View>
-          }
-        />
+
+            {twitterStats && (
+              <>
+                <Text style={styles.twitterHandle}>{twitterStats.twitter_handle}</Text>
+
+                <View style={styles.twitterStatsRow}>
+                  <View style={[styles.twitterStatCard, { backgroundColor: '#E8F5FE' }]}>
+                    <Ionicons name="document-text-outline" size={20} color="#1DA1F2" />
+                    <Text style={styles.twitterStatValue}>{twitterStats.total_twitter_issues}</Text>
+                    <Text style={styles.twitterStatLabel}>Total Issues</Text>
+                  </View>
+                  <View style={[styles.twitterStatCard, { backgroundColor: '#FFF3E0' }]}>
+                    <Ionicons name="hourglass-outline" size={20} color="#FF9800" />
+                    <Text style={styles.twitterStatValue}>{twitterStats.pending_twitter_issues}</Text>
+                    <Text style={styles.twitterStatLabel}>Pending</Text>
+                  </View>
+                  <View style={[styles.twitterStatCard, { backgroundColor: '#FFEBEE' }]}>
+                    <Ionicons name="location-outline" size={20} color="#F44336" />
+                    <Text style={styles.twitterStatValue}>{twitterStats.pending_location_issues}</Text>
+                    <Text style={styles.twitterStatLabel}>Need Location</Text>
+                  </View>
+                </View>
+
+                {/* Sync Info */}
+                <View style={styles.syncInfoContainer}>
+                  <Text style={styles.syncInfoTitle}>Sync Status</Text>
+                  <Text style={styles.syncInfoText}>
+                    Tweets processed: {twitterStats.sync_state?.total_tweets_processed || 0}
+                  </Text>
+                  <Text style={styles.syncInfoText}>
+                    Issues created: {twitterStats.sync_state?.total_issues_created || 0}
+                  </Text>
+                  {twitterStats.sync_state?.last_sync_at && (
+                    <Text style={styles.syncInfoText}>
+                      Last sync: {new Date(twitterStats.sync_state.last_sync_at).toLocaleString()}
+                    </Text>
+                  )}
+                </View>
+
+                {/* Manual Sync Button */}
+                <TouchableOpacity
+                  style={[styles.syncButton, syncing && styles.syncButtonDisabled]}
+                  onPress={handleTwitterSync}
+                  disabled={syncing || !twitterStats.enabled}
+                >
+                  {syncing ? (
+                    <ActivityIndicator color="#fff" size="small" />
+                  ) : (
+                    <>
+                      <Ionicons name="sync-outline" size={18} color="#fff" />
+                      <Text style={styles.syncButtonText}>Sync Now</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+
+                {/* Top Reporters */}
+                {twitterStats.top_reporters && twitterStats.top_reporters.length > 0 && (
+                  <View style={styles.topReportersContainer}>
+                    <Text style={styles.topReportersTitle}>Top Twitter Reporters</Text>
+                    {twitterStats.top_reporters.map((reporter, index) => (
+                      <View key={reporter.username} style={styles.reporterItem}>
+                        <View style={styles.reporterRank}>
+                          <Text style={styles.reporterRankText}>#{index + 1}</Text>
+                        </View>
+                        <View style={styles.reporterInfo}>
+                          <Text style={styles.reporterName}>
+                            {reporter.display_name || `@${reporter.username}`}
+                          </Text>
+                          <Text style={styles.reporterHandle}>@{reporter.username}</Text>
+                        </View>
+                        <Text style={styles.reporterCount}>{reporter.count} issues</Text>
+                      </View>
+                    ))}
+                  </View>
+                )}
+              </>
+            )}
+
+            {!twitterStats && (
+              <View style={styles.twitterLoading}>
+                <ActivityIndicator color="#1DA1F2" />
+                <Text style={styles.twitterLoadingText}>Loading Twitter stats...</Text>
+              </View>
+            )}
+          </View>
+        </ScrollView>
       )}
     </SafeAreaView>
   );
@@ -764,5 +914,195 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',
+  },
+  // Tab styles
+  tabContainer: {
+    flexDirection: 'row',
+    marginHorizontal: 16,
+    marginBottom: 16,
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 4,
+  },
+  tab: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 12,
+    borderRadius: 10,
+    gap: 6,
+  },
+  tabActive: {
+    backgroundColor: '#FFF3E0',
+  },
+  tabText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
+  },
+  tabTextActive: {
+    color: '#FF5722',
+    fontWeight: '600',
+  },
+  // Twitter section styles
+  twitterSection: {
+    flex: 1,
+    paddingHorizontal: 16,
+  },
+  twitterStatsContainer: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 20,
+    marginBottom: 16,
+  },
+  twitterHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  twitterTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#333',
+    marginLeft: 10,
+    flex: 1,
+  },
+  twitterHandle: {
+    fontSize: 14,
+    color: '#1DA1F2',
+    marginBottom: 16,
+  },
+  statusIndicator: {
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  statusEnabled: {
+    backgroundColor: '#E8F5E9',
+  },
+  statusDisabled: {
+    backgroundColor: '#FFEBEE',
+  },
+  statusText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#666',
+  },
+  twitterStatsRow: {
+    flexDirection: 'row',
+    marginBottom: 20,
+    gap: 10,
+  },
+  twitterStatCard: {
+    flex: 1,
+    alignItems: 'center',
+    padding: 14,
+    borderRadius: 12,
+  },
+  twitterStatValue: {
+    fontSize: 22,
+    fontWeight: 'bold',
+    color: '#333',
+    marginTop: 6,
+  },
+  twitterStatLabel: {
+    fontSize: 10,
+    color: '#666',
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  syncInfoContainer: {
+    backgroundColor: '#f8f9fa',
+    borderRadius: 12,
+    padding: 14,
+    marginBottom: 16,
+  },
+  syncInfoTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 8,
+  },
+  syncInfoText: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 4,
+  },
+  syncButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#1DA1F2',
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 8,
+    marginBottom: 20,
+  },
+  syncButtonDisabled: {
+    backgroundColor: '#93CDF2',
+  },
+  syncButtonText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  topReportersContainer: {
+    borderTopWidth: 1,
+    borderTopColor: '#f0f0f0',
+    paddingTop: 16,
+  },
+  topReportersTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 12,
+  },
+  reporterItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f5f5f5',
+  },
+  reporterRank: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#E8F5FE',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  reporterRankText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#1DA1F2',
+  },
+  reporterInfo: {
+    flex: 1,
+  },
+  reporterName: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#333',
+  },
+  reporterHandle: {
+    fontSize: 12,
+    color: '#999',
+  },
+  reporterCount: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#1DA1F2',
+  },
+  twitterLoading: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  twitterLoadingText: {
+    fontSize: 13,
+    color: '#666',
+    marginTop: 12,
   },
 });

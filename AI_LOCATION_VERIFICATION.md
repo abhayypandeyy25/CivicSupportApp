@@ -18,17 +18,17 @@ The AI classification feature:
 - Analyzes issue title and description
 - Suggests appropriate category (roads, sanitation, water, etc.)
 - Recommends which government officials should handle it
-- Uses emergentintegrations LLM for intelligent classification
+- Uses anthropic LLM for intelligent classification
 
 ### Implementation Details
 
 ```python
 async def classify_issue_with_ai(title: str, description: str, location: Optional[Location] = None):
     """Use AI to classify the civic issue"""
-    api_key = os.environ.get('EMERGENT_LLM_KEY')
+    api_key = os.environ.get('ANTHROPIC_API_KEY')
 
     if not api_key:
-        logger.warning("EMERGENT_LLM_KEY not found, returning default classification")
+        logger.warning("ANTHROPIC_API_KEY not found, returning default classification")
         return AIClassificationResponse(category="general", confidence=0.5)
 
     # Uses LlmChat to analyze issue
@@ -64,8 +64,8 @@ async def classify_issue_with_ai(title: str, description: str, location: Optiona
 
 #### 1. Get API Key
 
-You need an API key from emergentintegrations:
-- Visit: https://emergentintegrations.com (or provider documentation)
+You need an API key from anthropic:
+- Visit: https://anthropic.com (or provider documentation)
 - Sign up and get your API key
 - Copy the key
 
@@ -73,7 +73,7 @@ You need an API key from emergentintegrations:
 
 ```bash
 # In backend/.env
-EMERGENT_LLM_KEY=your_api_key_here
+ANTHROPIC_API_KEY=your_api_key_here
 ```
 
 #### 3. Verify Installation
@@ -81,7 +81,7 @@ EMERGENT_LLM_KEY=your_api_key_here
 ```bash
 cd backend
 pip install -r requirements.txt
-python3 -c "from emergentintegrations.llm.chat import LlmChat; print('✅ AI Library installed')"
+python3 -c "from anthropic.llm.chat import LlmChat; print('✅ AI Library installed')"
 ```
 
 ### Fallback Behavior
@@ -334,7 +334,7 @@ pip install -r requirements.txt
 
 **Verify**:
 ```bash
-python3 -c "from emergentintegrations.llm.chat import LlmChat; print('✅ AI OK')"
+python3 -c "from anthropic.llm.chat import LlmChat; print('✅ AI OK')"
 python3 -c "from motor.motor_asyncio import AsyncIOMotorClient; print('✅ MongoDB OK')"
 ```
 
@@ -352,7 +352,7 @@ MONGO_URL=mongodb://localhost:27017
 DB_NAME=civicsense
 
 # For AI functionality (optional but recommended)
-EMERGENT_LLM_KEY=your_api_key_here
+ANTHROPIC_API_KEY=your_api_key_here
 
 # For production
 ALLOWED_ORIGINS=http://localhost:8081,http://localhost:19006
@@ -430,14 +430,14 @@ console.log(location.coords.latitude, location.coords.longitude);
 **Symptom**: Always returns `category="general"`
 
 **Solutions**:
-1. Check if `EMERGENT_LLM_KEY` is set in `.env`
+1. Check if `ANTHROPIC_API_KEY` is set in `.env`
    ```bash
-   cat backend/.env | grep EMERGENT_LLM_KEY
+   cat backend/.env | grep ANTHROPIC_API_KEY
    ```
 
 2. Verify API key is valid
    ```bash
-   curl https://api.emergentintegrations.com/test -H "Authorization: Bearer YOUR_KEY"
+   curl https://api.anthropic.com/test -H "Authorization: Bearer YOUR_KEY"
    ```
 
 3. Check server logs for errors
@@ -447,7 +447,7 @@ console.log(location.coords.latitude, location.coords.longitude);
 
 4. Test library directly
    ```python
-   from emergentintegrations.llm.chat import LlmChat
+   from anthropic.llm.chat import LlmChat
    chat = LlmChat(api_key="YOUR_KEY", session_id="test")
    print("✅ Library works")
    ```
@@ -509,7 +509,7 @@ console.log(location.coords.latitude, location.coords.longitude);
 
 - **Code**: Fully implemented
 - **Status**: Production-ready
-- **Requirement**: EMERGENT_LLM_KEY environment variable
+- **Requirement**: ANTHROPIC_API_KEY environment variable
 - **Fallback**: Works without key (returns default category)
 - **Test**: Create an issue and check `ai_suggested_category` field
 

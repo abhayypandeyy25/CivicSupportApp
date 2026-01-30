@@ -159,7 +159,7 @@ mongosh civicsense --eval "db.issues.find(...).explain('executionStats')"
 **Test**: Create an issue, check if category is auto-suggested
 ```bash
 # Check AI configuration
-grep EMERGENT_LLM_KEY backend/.env
+grep ANTHROPIC_API_KEY backend/.env
 
 # If not set: AI uses fallback mode (still works!)
 ```

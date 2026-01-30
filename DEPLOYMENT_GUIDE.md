@@ -402,7 +402,7 @@ sudo certbot --nginx -d yourdomain.com
    MONGO_URL=${MONGO_URL}  # Auto-provided by Railway
    DB_NAME=civicsense
    ALLOWED_ORIGINS=https://your-frontend-url.railway.app
-   EMERGENT_LLM_KEY=your_key
+   ANTHROPIC_API_KEY=your_key
    JWT_SECRET=your_secret
    ENVIRONMENT=production
    ```

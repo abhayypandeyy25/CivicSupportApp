@@ -95,6 +95,42 @@ async def create_indexes():
         )
         logger.info("✓ Created index on issues.assigned_official_id")
 
+        # Index on source for filtering by app/twitter
+        await db.issues.create_index([("source", 1)], name="source_idx")
+        logger.info("✓ Created index on issues.source")
+
+        # Index on location_status for finding issues that need location assignment
+        await db.issues.create_index([("location_status", 1)], name="location_status_idx")
+        logger.info("✓ Created index on issues.location_status")
+
+        # Unique sparse index on twitter_data.tweet_id for deduplication
+        await db.issues.create_index(
+            [("twitter_data.tweet_id", 1)],
+            sparse=True,
+            unique=True,
+            name="twitter_tweet_id_unique"
+        )
+        logger.info("✓ Created unique sparse index on issues.twitter_data.tweet_id")
+
+        # Index on twitter_data.twitter_user_id for finding issues by Twitter user
+        await db.issues.create_index(
+            [("twitter_data.twitter_user_id", 1)],
+            sparse=True,
+            name="twitter_user_idx"
+        )
+        logger.info("✓ Created index on issues.twitter_data.twitter_user_id")
+
+
+        # ==================== TWITTER_SYNC_STATE COLLECTION ====================
+        logger.info("Creating indexes for 'twitter_sync_state' collection...")
+
+        await db.twitter_sync_state.create_index(
+            [("id", 1)],
+            unique=True,
+            name="sync_state_id"
+        )
+        logger.info("✓ Created unique index on twitter_sync_state.id")
+
 
         # ==================== GOVT_OFFICIALS COLLECTION ====================
         logger.info("Creating indexes for 'govt_officials' collection...")
@@ -143,7 +179,7 @@ async def create_indexes():
 
         # List all indexes for verification
         logger.info("\nVerifying indexes...")
-        for collection_name in ['users', 'issues', 'govt_officials', 'categories']:
+        for collection_name in ['users', 'issues', 'govt_officials', 'categories', 'twitter_sync_state']:
             indexes = await db[collection_name].index_information()
             logger.info(f"\n{collection_name} indexes:")
             for index_name, index_info in indexes.items():
