@@ -1,5 +1,5 @@
 {
-  "buildCommand": "npx expo export -p web",
+  "buildCommand": "EXPO_PUBLIC_BACKEND_URL=https://backend-seven-sepia-43.vercel.app npx expo export -p web",
   "outputDirectory": "dist",
   "framework": null,
   "installCommand": "yarn install",
