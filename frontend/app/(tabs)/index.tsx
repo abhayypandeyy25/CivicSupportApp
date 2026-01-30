@@ -775,7 +775,7 @@ export default function GovernanceDashboard() {
         </Pressable>
       </Modal>
 
-      {/* View Details Modal - Redesigned */}
+      {/* View Details Modal - Redesigned V2 */}
       <Modal
         animationType="slide"
         transparent={true}
@@ -786,48 +786,39 @@ export default function GovernanceDashboard() {
           <View style={styles.viewModalContainer}>
             {selectedIssue && (
               <>
-                {/* Hero Image Section */}
-                <View style={styles.viewModalHero}>
-                  {selectedIssue.photos && selectedIssue.photos.length > 0 ? (
-                    <Image source={{ uri: selectedIssue.photos[0] }} style={styles.viewModalHeroImage} />
-                  ) : (
-                    <View style={styles.viewModalHeroPlaceholder}>
-                      <Ionicons name="image-outline" size={48} color="#ccc" />
+                {/* Header Banner */}
+                <View style={styles.viewModalHeader}>
+                  <View style={styles.viewModalHeaderLeft}>
+                    <TouchableOpacity style={styles.viewModalBackBtn} onPress={() => setViewModalVisible(false)}>
+                      <Ionicons name="arrow-back" size={24} color="#1a1a1a" />
+                    </TouchableOpacity>
+                    <Text style={styles.viewModalHeaderTitle}>Complaint Details</Text>
+                  </View>
+                  <View style={styles.viewModalHeaderRight}>
+                    <View style={[styles.viewModalHeaderStatus, { backgroundColor: getStatusConfig(selectedIssue.status).bgColor }]}>
+                      <View style={[styles.viewModalHeaderStatusDot, { backgroundColor: getStatusConfig(selectedIssue.status).color }]} />
+                      <Text style={[styles.viewModalHeaderStatusText, { color: getStatusConfig(selectedIssue.status).color }]}>
+                        {getStatusConfig(selectedIssue.status).label}
+                      </Text>
                     </View>
-                  )}
-                  {/* Overlay gradient */}
-                  <View style={styles.viewModalHeroOverlay} />
-
-                  {/* Close button */}
-                  <TouchableOpacity style={styles.viewModalCloseBtn} onPress={() => setViewModalVisible(false)}>
-                    <Ionicons name="close" size={24} color="#fff" />
-                  </TouchableOpacity>
-
-                  {/* Status Badge on image */}
-                  <View style={styles.viewModalHeroBadges}>
-                    <View style={[styles.viewModalStatusBadge, { backgroundColor: getStatusConfig(selectedIssue.status).color }]}>
-                      <Ionicons name={selectedIssue.status === 'resolved' ? 'checkmark-circle' : selectedIssue.status === 'in_progress' ? 'time' : 'alert-circle'} size={14} color="#fff" />
-                      <Text style={styles.viewModalStatusText}>{getStatusConfig(selectedIssue.status).label}</Text>
-                    </View>
-                    {selectedIssue.source === 'twitter' && (
-                      <View style={styles.viewModalTwitterBadge}>
-                        <Ionicons name="logo-twitter" size={14} color="#fff" />
-                      </View>
-                    )}
                   </View>
                 </View>
 
                 {/* Content Section */}
                 <ScrollView style={styles.viewModalBody} showsVerticalScrollIndicator={false}>
-                  {/* Category & ID */}
-                  <View style={styles.viewModalMetaRow}>
-                    <View style={[styles.viewModalCategoryChip, { backgroundColor: getCategoryConfig(selectedIssue.category).bgColor }]}>
-                      <Ionicons name={getCategoryConfig(selectedIssue.category).icon as any} size={14} color={getCategoryConfig(selectedIssue.category).color} />
-                      <Text style={[styles.viewModalCategoryText, { color: getCategoryConfig(selectedIssue.category).color }]}>
-                        {getCategoryConfig(selectedIssue.category).name}
-                      </Text>
+                  {/* Category and Source Row */}
+                  <View style={styles.viewModalCategoryRow}>
+                    <View style={[styles.viewModalCategoryBadge, { backgroundColor: getCategoryConfig(selectedIssue.category).color }]}>
+                      <Ionicons name={getCategoryConfig(selectedIssue.category).icon as any} size={16} color="#fff" />
+                      <Text style={styles.viewModalCategoryBadgeText}>{getCategoryConfig(selectedIssue.category).name}</Text>
                     </View>
-                    <Text style={styles.viewModalId}>#{selectedIssue.id.slice(0, 8)}</Text>
+                    {selectedIssue.source === 'twitter' && (
+                      <View style={styles.viewModalSourceBadge}>
+                        <Ionicons name="logo-twitter" size={14} color="#1DA1F2" />
+                        <Text style={styles.viewModalSourceText}>Twitter</Text>
+                      </View>
+                    )}
+                    <Text style={styles.viewModalIdText}>#{selectedIssue.id.slice(0, 8)}</Text>
                   </View>
 
                   {/* Title */}
@@ -838,14 +829,39 @@ export default function GovernanceDashboard() {
                     {selectedIssue.description || selectedIssue.twitter_data?.tweet_text || 'No description provided'}
                   </Text>
 
-                  {/* Info Cards Grid */}
-                  <View style={styles.viewModalInfoGrid}>
-                    {/* Reporter Card */}
-                    <View style={styles.viewModalInfoCard}>
-                      <View style={styles.viewModalInfoCardHeader}>
-                        <Ionicons name="person-circle-outline" size={18} color="#666" />
-                        <Text style={styles.viewModalInfoCardLabel}>Reporter</Text>
+                  {/* Photo Card with Gallery */}
+                  {selectedIssue.photos && selectedIssue.photos.length > 0 && (
+                    <View style={styles.viewModalPhotoCard}>
+                      <View style={styles.viewModalPhotoCardHeader}>
+                        <Ionicons name="images-outline" size={18} color="#666" />
+                        <Text style={styles.viewModalPhotoCardTitle}>Attached Photos</Text>
+                        <Text style={styles.viewModalPhotoCount}>{selectedIssue.photos.length} photo{selectedIssue.photos.length > 1 ? 's' : ''}</Text>
                       </View>
+                      <ScrollView
+                        horizontal
+                        showsHorizontalScrollIndicator={false}
+                        style={styles.viewModalPhotoScroll}
+                        contentContainerStyle={styles.viewModalPhotoScrollContent}
+                      >
+                        {selectedIssue.photos.map((photo, index) => (
+                          <TouchableOpacity key={index} style={styles.viewModalPhotoItem}>
+                            <Image source={{ uri: photo }} style={styles.viewModalPhotoImage} />
+                            <View style={styles.viewModalPhotoIndex}>
+                              <Text style={styles.viewModalPhotoIndexText}>{index + 1}/{selectedIssue.photos.length}</Text>
+                            </View>
+                          </TouchableOpacity>
+                        ))}
+                      </ScrollView>
+                    </View>
+                  )}
+
+                  {/* Reporter Card */}
+                  <View style={styles.viewModalInfoCardFull}>
+                    <View style={styles.viewModalInfoCardIcon}>
+                      <Ionicons name="person-circle" size={24} color="#FF5722" />
+                    </View>
+                    <View style={styles.viewModalInfoCardContent}>
+                      <Text style={styles.viewModalInfoCardSmallLabel}>Reported by</Text>
                       <View style={styles.viewModalReporterRow}>
                         {selectedIssue.twitter_data?.twitter_profile_image ? (
                           <Image source={{ uri: selectedIssue.twitter_data.twitter_profile_image }} style={styles.viewModalReporterAvatar} />
@@ -864,22 +880,25 @@ export default function GovernanceDashboard() {
                         </View>
                       </View>
                     </View>
+                  </View>
 
-                    {/* Date Card */}
-                    <View style={styles.viewModalInfoCard}>
-                      <View style={styles.viewModalInfoCardHeader}>
-                        <Ionicons name="calendar-outline" size={18} color="#666" />
-                        <Text style={styles.viewModalInfoCardLabel}>Reported</Text>
-                      </View>
+                  {/* Date and Time Card */}
+                  <View style={styles.viewModalInfoCardFull}>
+                    <View style={styles.viewModalInfoCardIcon}>
+                      <Ionicons name="calendar" size={24} color="#2196F3" />
+                    </View>
+                    <View style={styles.viewModalInfoCardContent}>
+                      <Text style={styles.viewModalInfoCardSmallLabel}>Reported on</Text>
                       <Text style={styles.viewModalInfoCardValue}>
                         {new Date(selectedIssue.created_at).toLocaleDateString('en-IN', {
+                          weekday: 'long',
                           day: 'numeric',
-                          month: 'short',
+                          month: 'long',
                           year: 'numeric'
                         })}
                       </Text>
                       <Text style={styles.viewModalInfoCardSubValue}>
-                        {new Date(selectedIssue.created_at).toLocaleTimeString('en-IN', {
+                        at {new Date(selectedIssue.created_at).toLocaleTimeString('en-IN', {
                           hour: '2-digit',
                           minute: '2-digit'
                         })}
@@ -887,107 +906,99 @@ export default function GovernanceDashboard() {
                     </View>
                   </View>
 
-                  {/* Location Card - Full Width */}
-                  <View style={styles.viewModalLocationCard}>
-                    <View style={styles.viewModalLocationHeader}>
-                      <View style={styles.viewModalLocationIcon}>
-                        <Ionicons name="location" size={20} color="#FF5722" />
-                      </View>
-                      <View style={styles.viewModalLocationInfo}>
-                        <Text style={styles.viewModalLocationLabel}>Location</Text>
-                        <Text style={styles.viewModalLocationValue}>
-                          {selectedIssue.location?.address || selectedIssue.location?.area || selectedIssue.location?.city || 'Location needed'}
-                        </Text>
-                      </View>
+                  {/* Location Card */}
+                  <View style={styles.viewModalInfoCardFull}>
+                    <View style={[styles.viewModalInfoCardIcon, { backgroundColor: '#FFF3E0' }]}>
+                      <Ionicons name="location" size={24} color="#FF9800" />
                     </View>
-                    {selectedIssue.location_status === 'pending' && (
-                      <View style={styles.viewModalLocationWarning}>
-                        <Ionicons name="warning-outline" size={14} color="#FF9800" />
-                        <Text style={styles.viewModalLocationWarningText}>Location verification pending</Text>
-                      </View>
-                    )}
+                    <View style={styles.viewModalInfoCardContent}>
+                      <Text style={styles.viewModalInfoCardSmallLabel}>Location</Text>
+                      <Text style={styles.viewModalInfoCardValue}>
+                        {selectedIssue.location?.address || selectedIssue.location?.area || selectedIssue.location?.city || 'Location needed'}
+                      </Text>
+                      {selectedIssue.location_status === 'pending' && (
+                        <View style={styles.viewModalLocationPendingBadge}>
+                          <Ionicons name="alert-circle" size={12} color="#FF9800" />
+                          <Text style={styles.viewModalLocationPendingText}>Verification pending</Text>
+                        </View>
+                      )}
+                    </View>
                   </View>
 
-                  {/* Twitter Engagement - Only for Twitter issues */}
+                  {/* Twitter Engagement Card */}
                   {selectedIssue.twitter_data && (
-                    <View style={styles.viewModalEngagementCard}>
-                      <View style={styles.viewModalEngagementHeader}>
-                        <Ionicons name="logo-twitter" size={18} color="#1DA1F2" />
-                        <Text style={styles.viewModalEngagementTitle}>Twitter Engagement</Text>
+                    <View style={styles.viewModalTwitterCard}>
+                      <View style={styles.viewModalTwitterCardHeader}>
+                        <View style={styles.viewModalTwitterLogo}>
+                          <Ionicons name="logo-twitter" size={20} color="#fff" />
+                        </View>
+                        <View style={styles.viewModalTwitterHeaderText}>
+                          <Text style={styles.viewModalTwitterTitle}>Twitter Engagement</Text>
+                          <Text style={styles.viewModalTwitterSubtitle}>Public interaction metrics</Text>
+                        </View>
                         <TouchableOpacity
-                          style={styles.viewModalOpenTweetBtn}
+                          style={styles.viewModalViewTweetBtn}
                           onPress={() => openTweet(selectedIssue.twitter_data!.tweet_id)}
                         >
-                          <Text style={styles.viewModalOpenTweetText}>View Tweet</Text>
+                          <Text style={styles.viewModalViewTweetText}>View</Text>
                           <Ionicons name="open-outline" size={14} color="#1DA1F2" />
                         </TouchableOpacity>
                       </View>
-                      <View style={styles.viewModalEngagementStats}>
-                        <View style={styles.viewModalEngagementStat}>
-                          <View style={[styles.viewModalEngagementIcon, { backgroundColor: '#FCE4EC' }]}>
-                            <Ionicons name="heart" size={18} color="#E91E63" />
-                          </View>
-                          <Text style={styles.viewModalEngagementNumber}>{selectedIssue.twitter_data.like_count || 0}</Text>
-                          <Text style={styles.viewModalEngagementLabel}>Likes</Text>
+                      <View style={styles.viewModalTwitterStats}>
+                        <View style={styles.viewModalTwitterStat}>
+                          <Ionicons name="heart" size={22} color="#E91E63" />
+                          <Text style={styles.viewModalTwitterStatNumber}>{selectedIssue.twitter_data.like_count || 0}</Text>
+                          <Text style={styles.viewModalTwitterStatLabel}>Likes</Text>
                         </View>
-                        <View style={styles.viewModalEngagementStat}>
-                          <View style={[styles.viewModalEngagementIcon, { backgroundColor: '#E8F5E9' }]}>
-                            <Ionicons name="repeat" size={18} color="#4CAF50" />
-                          </View>
-                          <Text style={styles.viewModalEngagementNumber}>{selectedIssue.twitter_data.retweet_count || 0}</Text>
-                          <Text style={styles.viewModalEngagementLabel}>Retweets</Text>
+                        <View style={styles.viewModalTwitterStatDivider} />
+                        <View style={styles.viewModalTwitterStat}>
+                          <Ionicons name="repeat" size={22} color="#17BF63" />
+                          <Text style={styles.viewModalTwitterStatNumber}>{selectedIssue.twitter_data.retweet_count || 0}</Text>
+                          <Text style={styles.viewModalTwitterStatLabel}>Retweets</Text>
                         </View>
-                        <View style={styles.viewModalEngagementStat}>
-                          <View style={[styles.viewModalEngagementIcon, { backgroundColor: '#E3F2FD' }]}>
-                            <Ionicons name="chatbubble" size={18} color="#1DA1F2" />
-                          </View>
-                          <Text style={styles.viewModalEngagementNumber}>{selectedIssue.twitter_data.reply_count || 0}</Text>
-                          <Text style={styles.viewModalEngagementLabel}>Replies</Text>
+                        <View style={styles.viewModalTwitterStatDivider} />
+                        <View style={styles.viewModalTwitterStat}>
+                          <Ionicons name="chatbubble" size={22} color="#1DA1F2" />
+                          <Text style={styles.viewModalTwitterStatNumber}>{selectedIssue.twitter_data.reply_count || 0}</Text>
+                          <Text style={styles.viewModalTwitterStatLabel}>Replies</Text>
                         </View>
                       </View>
                     </View>
                   )}
 
-                  <View style={{ height: 100 }} />
+                  <View style={{ height: 120 }} />
                 </ScrollView>
 
                 {/* Fixed Action Buttons at Bottom */}
                 <View style={styles.viewModalActionsFixed}>
                   <TouchableOpacity
-                    style={styles.viewModalActionBtn}
+                    style={styles.viewModalPrimaryBtn}
                     onPress={() => {
                       setViewModalVisible(false);
                       setTimeout(() => openStatusModal(selectedIssue), 300);
                     }}
                   >
-                    <View style={[styles.viewModalActionIcon, { backgroundColor: '#E8F5E9' }]}>
-                      <Ionicons name="checkmark-circle" size={20} color="#4CAF50" />
-                    </View>
-                    <Text style={styles.viewModalActionLabel}>Update Status</Text>
+                    <Ionicons name="checkmark-circle" size={20} color="#fff" />
+                    <Text style={styles.viewModalPrimaryBtnText}>Update Status</Text>
                   </TouchableOpacity>
 
                   <TouchableOpacity
-                    style={styles.viewModalActionBtn}
+                    style={styles.viewModalSecondaryBtn}
                     onPress={() => {
                       setViewModalVisible(false);
                       setTimeout(() => openAssignModal(selectedIssue), 300);
                     }}
                   >
-                    <View style={[styles.viewModalActionIcon, { backgroundColor: '#F3E5F5' }]}>
-                      <Ionicons name="person-add" size={20} color="#9C27B0" />
-                    </View>
-                    <Text style={styles.viewModalActionLabel}>Assign Official</Text>
+                    <Ionicons name="person-add" size={20} color="#9C27B0" />
+                    <Text style={styles.viewModalSecondaryBtnText}>Assign</Text>
                   </TouchableOpacity>
 
                   {selectedIssue.twitter_data && (
                     <TouchableOpacity
-                      style={styles.viewModalActionBtn}
+                      style={styles.viewModalSecondaryBtn}
                       onPress={() => openTweet(selectedIssue.twitter_data!.tweet_id)}
                     >
-                      <View style={[styles.viewModalActionIcon, { backgroundColor: '#E8F5FE' }]}>
-                        <Ionicons name="logo-twitter" size={20} color="#1DA1F2" />
-                      </View>
-                      <Text style={styles.viewModalActionLabel}>Open Tweet</Text>
+                      <Ionicons name="logo-twitter" size={20} color="#1DA1F2" />
                     </TouchableOpacity>
                   )}
                 </View>
@@ -1759,61 +1770,52 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
 
-  // View Modal - Redesigned
+  // View Modal - Redesigned V2
   viewModalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
   },
   viewModalContainer: {
     flex: 1,
-    backgroundColor: '#fff',
-    marginTop: 40,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
+    backgroundColor: '#f5f7fa',
+    marginTop: 50,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
     overflow: 'hidden',
   },
-  viewModalHero: {
-    height: 220,
-    position: 'relative',
+  viewModalHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#fff',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
   },
-  viewModalHeroImage: {
-    width: '100%',
-    height: '100%',
+  viewModalHeaderLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
   },
-  viewModalHeroPlaceholder: {
-    width: '100%',
-    height: '100%',
+  viewModalBackBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: '#f5f5f5',
     justifyContent: 'center',
     alignItems: 'center',
   },
-  viewModalHeroOverlay: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    height: 80,
-    background: 'linear-gradient(180deg, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0) 100%)',
+  viewModalHeaderTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#1a1a1a',
   },
-  viewModalCloseBtn: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
+  viewModalHeaderRight: {
+    flexDirection: 'row',
     alignItems: 'center',
   },
-  viewModalHeroBadges: {
-    position: 'absolute',
-    bottom: 16,
-    left: 16,
-    flexDirection: 'row',
-    gap: 8,
-  },
-  viewModalStatusBadge: {
+  viewModalHeaderStatus: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
@@ -1821,85 +1823,171 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     gap: 6,
   },
-  viewModalStatusText: {
-    color: '#fff',
-    fontSize: 12,
-    fontWeight: '700',
+  viewModalHeaderStatusDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
   },
-  viewModalTwitterBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: '#1DA1F2',
-    justifyContent: 'center',
-    alignItems: 'center',
+  viewModalHeaderStatusText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   viewModalBody: {
     flex: 1,
-    padding: 20,
+    padding: 16,
   },
-  viewModalMetaRow: {
+  viewModalCategoryRow: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    gap: 10,
     marginBottom: 12,
   },
-  viewModalCategoryChip: {
+  viewModalCategoryBadge: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 16,
+    borderRadius: 20,
     gap: 6,
   },
-  viewModalCategoryText: {
+  viewModalCategoryBadgeText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  viewModalSourceBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 16,
+    backgroundColor: '#E8F5FE',
+    gap: 4,
+  },
+  viewModalSourceText: {
     fontSize: 12,
     fontWeight: '600',
+    color: '#1DA1F2',
   },
-  viewModalId: {
+  viewModalIdText: {
     fontSize: 12,
     color: '#999',
-    fontFamily: 'monospace',
+    marginLeft: 'auto',
   },
   viewModalTitleNew: {
-    fontSize: 22,
+    fontSize: 20,
     fontWeight: '700',
     color: '#1a1a1a',
     marginBottom: 8,
-    lineHeight: 28,
+    lineHeight: 26,
   },
   viewModalDescNew: {
-    fontSize: 15,
+    fontSize: 14,
     color: '#555',
-    lineHeight: 24,
-    marginBottom: 20,
-  },
-  viewModalInfoGrid: {
-    flexDirection: 'row',
-    gap: 12,
+    lineHeight: 22,
     marginBottom: 16,
   },
-  viewModalInfoCard: {
-    flex: 1,
-    backgroundColor: '#f8f9fa',
-    borderRadius: 12,
-    padding: 14,
+  // Photo Card
+  viewModalPhotoCard: {
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
   },
-  viewModalInfoCardHeader: {
+  viewModalPhotoCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    marginBottom: 10,
+    marginBottom: 12,
+    gap: 8,
   },
-  viewModalInfoCardLabel: {
-    fontSize: 12,
-    color: '#666',
-    fontWeight: '500',
-  },
-  viewModalInfoCardValue: {
-    fontSize: 15,
+  viewModalPhotoCardTitle: {
+    flex: 1,
+    fontSize: 14,
     fontWeight: '600',
     color: '#1a1a1a',
+  },
+  viewModalPhotoCount: {
+    fontSize: 12,
+    color: '#999',
+    backgroundColor: '#f5f5f5',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+  },
+  viewModalPhotoScroll: {
+    marginHorizontal: -4,
+  },
+  viewModalPhotoScrollContent: {
+    paddingHorizontal: 4,
+    gap: 12,
+  },
+  viewModalPhotoItem: {
+    position: 'relative',
+    borderRadius: 12,
+    overflow: 'hidden',
+  },
+  viewModalPhotoImage: {
+    width: 200,
+    height: 150,
+    borderRadius: 12,
+  },
+  viewModalPhotoIndex: {
+    position: 'absolute',
+    bottom: 8,
+    right: 8,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  viewModalPhotoIndexText: {
+    fontSize: 11,
+    color: '#fff',
+    fontWeight: '600',
+  },
+  // Info Card Full Width
+  viewModalInfoCardFull: {
+    flexDirection: 'row',
+    backgroundColor: '#fff',
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 2,
+  },
+  viewModalInfoCardIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#FFF3E0',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 14,
+  },
+  viewModalInfoCardContent: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  viewModalInfoCardSmallLabel: {
+    fontSize: 11,
+    color: '#999',
+    fontWeight: '500',
+    textTransform: 'uppercase',
+    marginBottom: 4,
+  },
+  viewModalInfoCardValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#1a1a1a',
+    lineHeight: 20,
   },
   viewModalInfoCardSubValue: {
     fontSize: 13,
@@ -1912,15 +2000,15 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   viewModalReporterAvatar: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
   },
   viewModalReporterAvatarPlaceholder: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#e0e0e0',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -1935,145 +2023,141 @@ const styles = StyleSheet.create({
   viewModalReporterHandleNew: {
     fontSize: 12,
     color: '#1DA1F2',
+    marginTop: 2,
   },
-  viewModalLocationCard: {
+  viewModalLocationPendingBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    marginTop: 6,
+    backgroundColor: '#FFF3E0',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    alignSelf: 'flex-start',
+  },
+  viewModalLocationPendingText: {
+    fontSize: 11,
+    color: '#FF9800',
+    fontWeight: '500',
+  },
+  // Twitter Card
+  viewModalTwitterCard: {
     backgroundColor: '#fff',
-    borderRadius: 12,
+    borderRadius: 16,
     padding: 16,
     marginBottom: 16,
     borderWidth: 1,
-    borderColor: '#f0f0f0',
+    borderColor: '#E8F5FE',
   },
-  viewModalLocationHeader: {
+  viewModalTwitterCardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
+    marginBottom: 16,
   },
-  viewModalLocationIcon: {
+  viewModalTwitterLogo: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#FFF3E0',
+    backgroundColor: '#1DA1F2',
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
   },
-  viewModalLocationInfo: {
+  viewModalTwitterHeaderText: {
     flex: 1,
   },
-  viewModalLocationLabel: {
-    fontSize: 11,
-    color: '#999',
-    fontWeight: '500',
-    textTransform: 'uppercase',
-    marginBottom: 2,
-  },
-  viewModalLocationValue: {
-    fontSize: 14,
-    color: '#1a1a1a',
-    fontWeight: '500',
-  },
-  viewModalLocationWarning: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginTop: 12,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#f5f5f5',
-  },
-  viewModalLocationWarningText: {
-    fontSize: 12,
-    color: '#FF9800',
-    fontWeight: '500',
-  },
-  viewModalEngagementCard: {
-    backgroundColor: '#f8fbff',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: '#e8f4fd',
-  },
-  viewModalEngagementHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 16,
-    gap: 8,
-  },
-  viewModalEngagementTitle: {
-    flex: 1,
+  viewModalTwitterTitle: {
     fontSize: 14,
     fontWeight: '600',
     color: '#1a1a1a',
   },
-  viewModalOpenTweetBtn: {
+  viewModalTwitterSubtitle: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 1,
+  },
+  viewModalViewTweetBtn: {
     flexDirection: 'row',
     alignItems: 'center',
+    backgroundColor: '#E8F5FE',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
     gap: 4,
   },
-  viewModalOpenTweetText: {
+  viewModalViewTweetText: {
     fontSize: 12,
     color: '#1DA1F2',
     fontWeight: '600',
   },
-  viewModalEngagementStats: {
+  viewModalTwitterStats: {
     flexDirection: 'row',
     justifyContent: 'space-around',
-  },
-  viewModalEngagementStat: {
     alignItems: 'center',
+    backgroundColor: '#f8fbff',
+    borderRadius: 12,
+    paddingVertical: 16,
   },
-  viewModalEngagementIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    justifyContent: 'center',
+  viewModalTwitterStat: {
     alignItems: 'center',
-    marginBottom: 8,
+    flex: 1,
   },
-  viewModalEngagementNumber: {
-    fontSize: 18,
+  viewModalTwitterStatDivider: {
+    width: 1,
+    height: 40,
+    backgroundColor: '#e8f4fd',
+  },
+  viewModalTwitterStatNumber: {
+    fontSize: 20,
     fontWeight: '700',
     color: '#1a1a1a',
+    marginTop: 6,
   },
-  viewModalEngagementLabel: {
+  viewModalTwitterStatLabel: {
     fontSize: 11,
     color: '#666',
     marginTop: 2,
   },
+  // Action Buttons
   viewModalActionsFixed: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     flexDirection: 'row',
-    justifyContent: 'space-around',
+    alignItems: 'center',
     padding: 16,
     paddingBottom: 24,
     backgroundColor: '#fff',
     borderTopWidth: 1,
     borderTopColor: '#f0f0f0',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: -4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 10,
+    gap: 12,
   },
-  viewModalActionBtn: {
+  viewModalPrimaryBtn: {
+    flex: 1,
+    flexDirection: 'row',
     alignItems: 'center',
-    padding: 8,
-  },
-  viewModalActionIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
     justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 6,
+    backgroundColor: '#4CAF50',
+    paddingVertical: 14,
+    borderRadius: 12,
+    gap: 8,
   },
-  viewModalActionLabel: {
-    fontSize: 11,
-    color: '#666',
-    fontWeight: '500',
+  viewModalPrimaryBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
+  },
+  viewModalSecondaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f5f5f5',
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    gap: 6,
+  },
+  viewModalSecondaryBtnText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#9C27B0',
   },
 });
