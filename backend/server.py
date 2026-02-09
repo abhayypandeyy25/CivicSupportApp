@@ -8,6 +8,7 @@ from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
 import os
 import logging
+import json
 from pathlib import Path
 from pydantic import BaseModel, Field, field_validator, ConfigDict
 from typing import List, Optional
@@ -16,7 +17,7 @@ from datetime import datetime
 import firebase_admin
 from firebase_admin import auth as firebase_auth, credentials
 import base64
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+import anthropic
 import asyncio
 import math
 
@@ -235,81 +236,88 @@ async def verify_admin(user: User = Depends(get_current_user)) -> User:
 
 # ==================== AI CLASSIFICATION ====================
 
+CLASSIFICATION_SYSTEM_PROMPT = """You are an expert in classifying civic issues in Indian cities.
+Your job is to categorize citizen complaints and suggest which government department/official should handle them.
+
+Categories available:
+- roads: Potholes, road damage, street lights, traffic signals
+- sanitation: Garbage, sewage, drains, cleanliness
+- water: Water supply, leakage, contamination
+- electricity: Power cuts, streetlights, illegal connections
+- encroachment: Illegal construction, footpath blocking
+- parks: Park maintenance, playground issues
+- public_safety: Crime, harassment, safety concerns
+- health: Hospital issues, epidemic concerns
+- education: School issues, mid-day meals
+- transport: Bus, metro, auto-rickshaw issues
+- housing: Building permissions, slum issues
+- general: Other issues
+
+Government hierarchy (from local to national):
+1. Parshad (Ward Councillor) - Local ward issues
+2. MCD (Municipal Corporation) - City level civic issues
+3. IAS Officers - Administrative issues
+4. MLA (Member of Legislative Assembly) - Constituency level
+5. MP (Member of Parliament) - Parliamentary constituency
+6. CM (Chief Minister) - State level issues
+7. PM (Prime Minister) - National level issues
+
+Respond ONLY with valid JSON in this exact format:
+{
+    "category": "category_name",
+    "sub_category": "optional_sub_category_or_null",
+    "suggested_hierarchy_levels": [1, 2],
+    "confidence": 0.95
+}"""
+
 async def classify_issue_with_ai(title: str, description: str, location: Optional[Location] = None) -> AIClassificationResponse:
-    """Use AI to classify the civic issue"""
+    """Use AI to classify the civic issue using Anthropic Claude"""
     try:
-        api_key = os.environ.get('EMERGENT_LLM_KEY')
+        api_key = os.environ.get('ANTHROPIC_API_KEY')
         if not api_key:
-            logger.warning("EMERGENT_LLM_KEY not found, returning default classification")
+            logger.warning("ANTHROPIC_API_KEY not found, returning default classification")
             return AIClassificationResponse(category="general", confidence=0.5)
-        
-        chat = LlmChat(
-            api_key=api_key,
-            session_id=f"classify-{uuid.uuid4()}",
-            system_message="""You are an expert in classifying civic issues in Indian cities. 
-            Your job is to categorize citizen complaints and suggest which government department/official should handle them.
-            
-            Categories available:
-            - roads: Potholes, road damage, street lights, traffic signals
-            - sanitation: Garbage, sewage, drains, cleanliness
-            - water: Water supply, leakage, contamination
-            - electricity: Power cuts, streetlights, illegal connections
-            - encroachment: Illegal construction, footpath blocking
-            - parks: Park maintenance, playground issues
-            - public_safety: Crime, harassment, safety concerns
-            - health: Hospital issues, epidemic concerns
-            - education: School issues, mid-day meals
-            - transport: Bus, metro, auto-rickshaw issues
-            - housing: Building permissions, slum issues
-            - general: Other issues
-            
-            Government hierarchy (from local to national):
-            1. Parshad (Ward Councillor) - Local ward issues
-            2. MCD (Municipal Corporation) - City level civic issues
-            3. IAS Officers - Administrative issues
-            4. MLA (Member of Legislative Assembly) - Constituency level
-            5. MP (Member of Parliament) - Parliamentary constituency
-            6. CM (Chief Minister) - State level issues
-            7. PM (Prime Minister) - National level issues
-            
-            Respond in JSON format:
-            {
-                "category": "category_name",
-                "sub_category": "optional_sub_category",
-                "suggested_hierarchy_levels": [1, 2],
-                "confidence": 0.95
-            }"""
+
+        client = anthropic.Anthropic(api_key=api_key)
+
+        location_str = f"\nLocation: {location.area or ''}, {location.city}" if location else ""
+        user_message = f"Classify this civic issue:\nTitle: {title}\nDescription: {description}{location_str}\n\nRespond with JSON only."
+
+        model = os.environ.get('ANTHROPIC_MODEL', 'claude-3-haiku-20240307')
+
+        response = client.messages.create(
+            model=model,
+            max_tokens=200,
+            system=CLASSIFICATION_SYSTEM_PROMPT,
+            messages=[
+                {"role": "user", "content": user_message}
+            ]
         )
-        
-        location_str = f" Location: {location.area or ''}, {location.city}" if location else ""
-        user_message = UserMessage(
-            text=f"Classify this civic issue:\nTitle: {title}\nDescription: {description}{location_str}\n\nRespond only with valid JSON."
-        )
-        
-        response = await chat.send_message(user_message)
-        
-        # Parse the response
-        import json
+
+        response_text = response.content[0].text.strip()
+
+        # Handle potential markdown code blocks
+        if response_text.startswith("```"):
+            response_text = response_text.split("```")[1]
+            if response_text.startswith("json"):
+                response_text = response_text[4:]
+            response_text = response_text.strip()
+
         try:
-            # Extract JSON from response
-            response_text = response.strip()
-            if "```json" in response_text:
-                response_text = response_text.split("```json")[1].split("```")[0]
-            elif "```" in response_text:
-                response_text = response_text.split("```")[1].split("```")[0]
-            
             result = json.loads(response_text)
-            
+
             # Get suggested officials from database
             suggested_officials = []
             hierarchy_levels = result.get('suggested_hierarchy_levels', [1, 2])
-            
-            # Find officials matching the category and hierarchy
+
+            if isinstance(hierarchy_levels, int):
+                hierarchy_levels = [hierarchy_levels]
+
             officials_cursor = db.govt_officials.find({
                 "hierarchy_level": {"$in": hierarchy_levels},
                 "is_active": True
             }).limit(5)
-            
+
             async for official in officials_cursor:
                 suggested_officials.append({
                     "id": official['id'],
@@ -317,7 +325,7 @@ async def classify_issue_with_ai(title: str, description: str, location: Optiona
                     "designation": official['designation'],
                     "department": official['department']
                 })
-            
+
             return AIClassificationResponse(
                 category=result.get('category', 'general'),
                 sub_category=result.get('sub_category'),
@@ -325,9 +333,9 @@ async def classify_issue_with_ai(title: str, description: str, location: Optiona
                 confidence=result.get('confidence', 0.8)
             )
         except json.JSONDecodeError:
-            logger.error(f"Failed to parse AI response: {response}")
+            logger.error(f"Failed to parse AI response: {response_text}")
             return AIClassificationResponse(category="general", confidence=0.5)
-            
+
     except Exception as e:
         logger.error(f"AI classification error: {str(e)}")
         return AIClassificationResponse(category="general", confidence=0.5)
