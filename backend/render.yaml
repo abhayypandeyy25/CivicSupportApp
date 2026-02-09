@@ -9,6 +9,8 @@ services:
         sync: false
       - key: ANTHROPIC_API_KEY
         sync: false
+      - key: ANTHROPIC_MODEL
+        value: claude-3-haiku-20240307
       - key: ENVIRONMENT
         value: production
       - key: ALLOWED_ORIGINS
@@ -17,3 +19,23 @@ services:
         value: civicsense
       - key: FIREBASE_PROJECT_ID
         value: civicsense-451d1
+      - key: LOG_LEVEL
+        value: INFO
+      - key: TWITTER_ENABLED
+        sync: false
+      - key: TWITTER_BEARER_TOKEN
+        sync: false
+      - key: TWITTER_API_KEY
+        sync: false
+      - key: TWITTER_API_SECRET
+        sync: false
+      - key: TWITTER_ACCESS_TOKEN
+        sync: false
+      - key: TWITTER_ACCESS_SECRET
+        sync: false
+      - key: TWITTER_ACCOUNT_ID
+        sync: false
+      - key: TWITTER_POLL_INTERVAL_SECONDS
+        value: "60"
+      - key: CIVICSENSE_DASHBOARD_URL
+        value: https://dashboard-mocha-seven-36.vercel.app

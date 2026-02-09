@@ -9,7 +9,7 @@ from typing import Optional
 
 import anthropic
 
-from ..models import AIClassificationResponse, Location
+from ..models import AIClassificationResponse, Location, TweetParseResult
 from ..database import get_database
 
 logger = logging.getLogger(__name__)
@@ -181,3 +181,104 @@ Write a realistic, helpful description that includes relevant details about the 
     except Exception as e:
         logger.error(f"Description generation error: {str(e)}")
         return None
+
+
+# System prompt for parsing tweets into civic issues
+TWEET_PARSE_SYSTEM_PROMPT = """You are an expert at analyzing tweets about civic issues in Indian cities, especially Delhi.
+Your job is to determine if a tweet is reporting a civic issue and extract structured data from it.
+
+A civic issue is a problem with public infrastructure, services, or safety that a government body should address.
+Examples: potholes, garbage, water leaks, broken streetlights, illegal encroachment, etc.
+NOT civic issues: personal opinions, jokes, questions about CivicSense, general conversation, political commentary without a specific issue.
+
+Categories available:
+- roads: Potholes, road damage, street lights, traffic signals
+- sanitation: Garbage, sewage, drains, cleanliness
+- water: Water supply, leakage, contamination
+- electricity: Power cuts, streetlights, illegal connections
+- encroachment: Illegal construction, footpath blocking
+- parks: Park maintenance, playground issues
+- public_safety: Crime, harassment, safety concerns
+- health: Hospital issues, epidemic concerns
+- education: School issues, mid-day meals
+- transport: Bus, metro, auto-rickshaw issues
+- housing: Building permissions, slum issues
+- general: Other issues
+
+Respond ONLY with valid JSON in this exact format:
+{
+    "is_civic_issue": true,
+    "title": "Short descriptive title (max 100 chars)",
+    "description": "Expanded 2-3 sentence description of the issue",
+    "category": "category_name",
+    "sub_category": null,
+    "area": "Extracted area/landmark or null if not mentioned",
+    "city": "Delhi",
+    "confidence": 0.85
+}
+
+If the tweet is NOT a civic issue, respond with:
+{
+    "is_civic_issue": false,
+    "title": "",
+    "description": "",
+    "category": "general",
+    "sub_category": null,
+    "area": null,
+    "city": "Delhi",
+    "confidence": 0.0
+}"""
+
+
+async def parse_tweet_to_issue(tweet_text: str, author_handle: str) -> TweetParseResult:
+    """Use AI to parse a tweet into structured issue data"""
+    try:
+        client = get_anthropic_client()
+        if not client:
+            logger.warning("ANTHROPIC_API_KEY not found, cannot parse tweet")
+            return TweetParseResult(is_civic_issue=False)
+
+        # Strip the @CivicSupportIN mention from the tweet for cleaner parsing
+        cleaned_text = tweet_text.replace("@CivicSupportIN", "").strip()
+
+        user_message = f"Tweet by @{author_handle}:\n\"{cleaned_text}\"\n\nAnalyze this tweet and respond with JSON only."
+
+        model = os.environ.get('ANTHROPIC_MODEL', 'claude-3-haiku-20240307')
+
+        response = client.messages.create(
+            model=model,
+            max_tokens=300,
+            system=TWEET_PARSE_SYSTEM_PROMPT,
+            messages=[
+                {"role": "user", "content": user_message}
+            ]
+        )
+
+        response_text = response.content[0].text.strip()
+
+        # Handle markdown code blocks
+        if response_text.startswith("```"):
+            response_text = response_text.split("```")[1]
+            if response_text.startswith("json"):
+                response_text = response_text[4:]
+            response_text = response_text.strip()
+
+        result = json.loads(response_text)
+
+        return TweetParseResult(
+            is_civic_issue=result.get('is_civic_issue', False),
+            title=result.get('title', ''),
+            description=result.get('description', ''),
+            category=result.get('category', 'general'),
+            sub_category=result.get('sub_category'),
+            area=result.get('area'),
+            city=result.get('city', 'Delhi'),
+            confidence=result.get('confidence', 0.0)
+        )
+
+    except json.JSONDecodeError:
+        logger.error(f"Failed to parse tweet AI response for tweet: {tweet_text[:100]}")
+        return TweetParseResult(is_civic_issue=False)
+    except Exception as e:
+        logger.error(f"Tweet parsing error: {str(e)}")
+        return TweetParseResult(is_civic_issue=False)

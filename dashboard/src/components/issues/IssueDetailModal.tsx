@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { X, MapPin, ThumbsUp, Eye, User, Calendar } from 'lucide-react';
+import { X, MapPin, ThumbsUp, Eye, User, Calendar, Twitter } from 'lucide-react';
 import { fetchIssue, fetchIssueTimeline, fetchIssueComments } from '../../api/endpoints';
 import type { Issue, TimelineEvent, Comment } from '../../api/types';
 import StatusBadge from '../shared/StatusBadge';
@@ -105,6 +105,18 @@ export default function IssueDetailModal({ issueId, onClose }: IssueDetailModalP
                     <CategoryBadge categoryId={issue.category} />
                     <StatusBadge status={issue.status} />
                   </div>
+
+                  {issue.source === 'twitter' && issue.source_meta && (
+                    <a
+                      href={issue.source_meta.tweet_url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center gap-2 px-3 py-2 bg-sky-50 rounded-lg text-sm text-sky-700 hover:bg-sky-100 transition-colors"
+                    >
+                      <Twitter className="w-4 h-4" />
+                      Reported via Twitter by @{issue.source_meta.twitter_handle}
+                    </a>
+                  )}
 
                   <p className="text-gray-700 text-sm leading-relaxed">{issue.description}</p>
 

@@ -1,4 +1,4 @@
-import { MapPin, ThumbsUp, Eye, MessageCircle } from 'lucide-react';
+import { MapPin, ThumbsUp, Eye, MessageCircle, Twitter } from 'lucide-react';
 import type { Issue } from '../../api/types';
 import StatusBadge from '../shared/StatusBadge';
 import CategoryBadge from '../shared/CategoryBadge';
@@ -52,6 +52,12 @@ export default function IssueCard({ issue, onClick }: IssueCardProps) {
         <div className="flex flex-wrap gap-1.5 mb-3">
           <CategoryBadge categoryId={issue.category} />
           <StatusBadge status={issue.status} />
+          {issue.source === 'twitter' && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-sky-50 text-sky-700">
+              <Twitter className="w-3 h-3" />
+              {issue.source_meta?.twitter_handle ? `@${issue.source_meta.twitter_handle}` : 'Twitter'}
+            </span>
+          )}
         </div>
 
         {/* Location */}

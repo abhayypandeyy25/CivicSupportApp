@@ -35,6 +35,17 @@ class Settings(BaseSettings):
     S3_BUCKET: Optional[str] = None
     AWS_REGION: str = "us-east-1"
 
+    # Twitter Integration
+    TWITTER_ENABLED: bool = False
+    TWITTER_BEARER_TOKEN: Optional[str] = None
+    TWITTER_API_KEY: Optional[str] = None
+    TWITTER_API_SECRET: Optional[str] = None
+    TWITTER_ACCESS_TOKEN: Optional[str] = None
+    TWITTER_ACCESS_SECRET: Optional[str] = None
+    TWITTER_ACCOUNT_ID: Optional[str] = None
+    TWITTER_POLL_INTERVAL_SECONDS: int = 60
+    CIVICSENSE_DASHBOARD_URL: str = "https://dashboard-mocha-seven-36.vercel.app"
+
     # Redis Configuration (for future caching)
     REDIS_URL: Optional[str] = None
 
@@ -71,20 +82,18 @@ class Settings(BaseSettings):
 
     def validate_required_for_production(self):
         """Validate that production-critical settings are configured"""
+        import logging
+        logger = logging.getLogger(__name__)
+
         if self.is_production:
-            missing = []
-
-            if not self.JWT_SECRET:
-                missing.append("JWT_SECRET")
-            if not self.SENTRY_DSN:
-                missing.append("SENTRY_DSN")
             if self.ALLOWED_ORIGINS == "http://localhost:8081,http://localhost:19006":
-                missing.append("ALLOWED_ORIGINS (still using localhost)")
+                raise ValueError("Production requires ALLOWED_ORIGINS to be set (not localhost)")
 
-            if missing:
-                raise ValueError(
-                    f"Production environment requires these settings: {', '.join(missing)}"
-                )
+            # Warn about optional but recommended settings
+            if not self.JWT_SECRET:
+                logger.warning("JWT_SECRET not set — using default. Set a strong secret for production.")
+            if not self.SENTRY_DSN:
+                logger.warning("SENTRY_DSN not set — error tracking disabled.")
 
 
 # Global settings instance

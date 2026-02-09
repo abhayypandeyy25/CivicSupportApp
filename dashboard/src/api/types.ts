@@ -46,6 +46,12 @@ export interface Issue {
   timeline: TimelineEvent[];
   priority_score: number;
   view_count: number;
+  source?: string;
+  source_meta?: {
+    tweet_id?: string;
+    tweet_url?: string;
+    twitter_handle?: string;
+  };
   created_at: string;
   updated_at: string;
 }
