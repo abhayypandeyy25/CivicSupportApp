@@ -19,7 +19,7 @@ class Settings(BaseSettings):
     FIREBASE_CREDENTIALS_PATH: Optional[str] = None
 
     # Security Configuration
-    ALLOWED_ORIGINS: str = "http://localhost:8081,http://localhost:19006"
+    ALLOWED_ORIGINS: str = "http://localhost:8081,http://localhost:19006,http://localhost:5173"
     JWT_SECRET: Optional[str] = None
 
     # AI/LLM Configuration (Anthropic Claude)

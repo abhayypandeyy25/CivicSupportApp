@@ -11,3 +11,9 @@ services:
         sync: false
       - key: ENVIRONMENT
         value: production
+      - key: ALLOWED_ORIGINS
+        sync: false
+      - key: DB_NAME
+        value: civicsense
+      - key: FIREBASE_PROJECT_ID
+        value: civicsense-451d1
