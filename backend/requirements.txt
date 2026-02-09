@@ -1,47 +1,33 @@
-# Core Framework
-fastapi==0.110.1
-uvicorn==0.25.0
-starlette==0.37.2
-python-multipart==0.0.21
+# Core
+fastapi>=0.110.0,<1.0.0
+uvicorn>=0.25.0,<1.0.0
+python-multipart>=0.0.6
 
 # Database
-motor==3.3.1
-pymongo==4.5.0
-dnspython==2.8.0
+motor>=3.3.0,<4.0.0
+dnspython>=2.0.0
 
-# Configuration
-pydantic==2.12.5
-pydantic-settings==2.1.0
-pydantic_core==2.41.5
-python-dotenv==1.2.1
+# Config
+pydantic>=2.0.0,<3.0.0
+pydantic-settings>=2.0.0,<3.0.0
+python-dotenv>=1.0.0
 
-# Authentication
-firebase_admin==7.1.0
+# Auth
+firebase-admin>=6.0.0
 
 # AI
-anthropic==0.40.0
+anthropic>=0.20.0
 
-# Twitter Integration
+# Twitter
 tweepy>=4.14.0
 APScheduler>=3.10.0
 
 # Rate Limiting
-slowapi==0.1.9
+slowapi>=0.1.9
 
-# Error Tracking (optional)
-sentry-sdk==2.0.0
+# Monitoring (optional)
+sentry-sdk>=2.0.0
 
 # HTTP
-httpx==0.28.1
-requests==2.32.5
-certifi>=2024.0.0
-urllib3>=2.0.0
-
-# Utilities
-typing_extensions>=4.0.0
-annotated-types>=0.4.0
-anyio>=3.0.0
-sniffio>=1.0.0
-h11>=0.14.0
-idna>=3.0
-click>=8.0.0
+httpx>=0.25.0
+requests>=2.31.0
